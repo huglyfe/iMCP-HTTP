@@ -111,7 +111,13 @@ struct HTTPTests {
     async let second = request("/mcp", method: "POST", token: tokens.accessToken, body: call)
     for result in try await [first, second] {
       check(result.0 == 200)
-      check(String(decoding: result.1, as: UTF8.self).contains("connection verified"))
+      let envelope = try require(JSONSerialization.jsonObject(with: result.1) as? [String: Any])
+      let reply = try require(envelope["result"] as? [String: Any])
+      let content = try require(reply["content"] as? [[String: Any]])
+      let text = try require(content.first?["text"] as? String)
+      let object = try require(
+        JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+      check(object["connected"] as? Bool == true && object["appleDataAccessed"] as? Bool == false)
     }
     check(try await request("/mcp", token: tokens.accessToken).0 == 405)
     check(

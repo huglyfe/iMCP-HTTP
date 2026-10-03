@@ -5,15 +5,23 @@ import SwiftMCP
 struct ConnectionCheck: Codable, Sendable {
   let connected: Bool
   let appleDataAccessed: Bool
-  let message: String
 }
 
 public actor ToolDispatcher {
-  private let reminders: ReminderTools?
-  public init(reminders: EventKitReminders? = nil) {
-    self.reminders = reminders.map { ReminderTools(access: $0) }
+  private let modules: [any AppleToolModule]
+  public init(
+    reminders: EventKitReminders? = nil, calendar: EventKitCalendar? = nil,
+    contacts: NativeContacts? = nil, maps: NativeMaps? = nil
+  ) {
+    var modules: [any AppleToolModule] = []
+    if let reminders { modules.append(ReminderTools(access: reminders)) }
+    if let calendar { modules.append(CalendarTools(access: calendar)) }
+    if let contacts { modules.append(ContactTools(access: contacts)) }
+    if let maps { modules.append(MapTools(access: maps)) }
+    self.modules = modules
   }
-  init(testReminders: any ReminderAccess) { reminders = ReminderTools(access: testReminders) }
+  init(testReminders: any ReminderAccess) { modules = [ReminderTools(access: testReminders)] }
+  init(modules: [any AppleToolModule]) { self.modules = modules }
 
   private static let connectionTool = MCPToolMetadata(
     name: "connection_check",
@@ -22,27 +30,33 @@ public actor ToolDispatcher {
     isConsequential: false, annotations: .init(hints: [.readOnly, .idempotent]))
 
   func tools() async -> [MCPToolMetadata] {
-    guard let reminders, await reminders.access.available else { return [Self.connectionTool] }
-    return [Self.connectionTool] + reminders.mcpToolMetadata
+    var metadata = [Self.connectionTool]
+    for module in modules where await module.available { metadata += await module.mcpToolMetadata }
+    return metadata
   }
 
   func call(_ name: String, arguments: JSONDictionary) async throws -> Encodable & Sendable {
     if name == "connection_check" {
       guard arguments.isEmpty else { throw invalidArguments("This tool takes no arguments.") }
       return ConnectionCheck(
-        connected: true, appleDataAccessed: false,
-        message: "iMCP-HTTP connection verified. No Apple data accessed.")
+        connected: true, appleDataAccessed: false)
     }
-    guard let reminders, let metadata = reminders.mcpToolMetadata.first(where: { $0.name == name })
-    else { throw ToolFailure("unknown_tool", "Unknown or disabled tool") }
-    guard await reminders.access.available else {
-      throw ToolFailure(
-        "service_unavailable", "Reminders is disabled or macOS permission is unavailable.")
+    for module in modules {
+      guard let metadata = await module.mcpToolMetadata.first(where: { $0.name == name }) else {
+        continue
+      }
+      guard await module.available else {
+        throw ToolFailure(
+          "service_unavailable", "Service is disabled or macOS permission is unavailable.")
+      }
+      guard Set(arguments.keys).isSubset(of: Set(metadata.parameters.map(\.name))),
+        !arguments.values.contains(.null)
+      else {
+        throw invalidArguments("Unknown or null argument. Consult the tool schema.")
+      }
+      return try await module.callTool(name, arguments: arguments)
     }
-    guard Set(arguments.keys).isSubset(of: Set(metadata.parameters.map(\.name))) else {
-      throw invalidArguments("Unknown argument. Consult the tool schema.")
-    }
-    return try await reminders.callTool(name, arguments: arguments)
+    throw ToolFailure("unknown_tool", "Unknown tool")
   }
 }
 
@@ -55,4 +69,17 @@ struct ToolFailure: LocalizedError, MCPToolErrorMetaProviding, Sendable {
   }
   var errorDescription: String? { message }
   var toolErrorMeta: JSONDictionary { ["errorCode": .string(code)] }
+}
+
+protocol AppleToolModule: MCPToolProviding, Sendable {
+  var available: Bool { get async }
+}
+extension ReminderTools: AppleToolModule {
+  var available: Bool { get async { await access.available } }
+}
+extension CalendarTools: AppleToolModule {
+  var available: Bool { get async { await access.available } }
+}
+extension ContactTools: AppleToolModule {
+  var available: Bool { get async { await access.available } }
 }

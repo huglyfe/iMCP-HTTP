@@ -2,7 +2,7 @@
 
 ## Implemented
 
-One native macOS process: SwiftUI main window/menu bar, an application runtime, embedded loopback HTTP, OAuth, MCP dispatch, and an EventKit Reminders adapter. `IMCPCore` contains protocol, authorization, service settings, and Apple access; it has no SwiftUI dependency. `IMCPHTTP` composes those objects and displays state.
+One native macOS process: SwiftUI main window/menu bar, an application runtime, embedded loopback HTTP, OAuth, MCP dispatch, and native Reminders, Calendar, Contacts, and Maps adapters. `IMCPCore` contains protocol, authorization, service settings, and Apple access; it has no SwiftUI dependency. `IMCPHTTP` composes those objects and displays state.
 
 ```text
 SwiftUI owner decisions / observed state
@@ -11,7 +11,7 @@ SwiftUI owner decisions / observed state
               |
  Hummingbird HTTP -> OAuth grant check -> SwiftMCP -> ToolDispatcher
                       |                                 |
-             private grant snapshot                EventKitReminders
+             private grant snapshot                Apple service adapters
                       |                                 |
                 native consent                     Apple frameworks
 ```
@@ -50,18 +50,22 @@ Each grant has independent opaque access and refresh tokens. Access expires afte
 
 `AuthorizationStore` serializes transitions. `grants.json` contains only credential hashes, grant IDs/timestamps, expiry, and revocation state. Save writes a private sibling, synchronizes it, and atomically renames it before publishing in-memory state. Directory permissions are 0700, grant file 0600. No recoverable app secret or database server. Invalid/mismatched stores fail closed without replacement. `services.json` records global enablement separately. State is under Application Support/iMCP-HTTP; development overrides can isolate it.
 
-## Reminders and app ownership
+## Apple services and app ownership
 
-Reminders starts disabled. Enable requests full EventKit access using the bundled usage description; the preference is persisted only after successful permission and settings save. Permission/enablement are rechecked on each operation, so stale client tool lists cannot bypass disablement. Reconnect clients after enabling to refresh discovery; this initial stateless transport does not broadcast changes.
+All four services start disabled. SwiftUI exposes working service toggles and current status. Reminders, Calendar, and Contacts request their own macOS permission only on the owner's enable action. Maps uses supplied coordinates and queries; it never requests device location. The app persists enablement after permission and settings save. Older settings retain existing Reminders enablement and default newly introduced services to false. Every approved client shares globally enabled capabilities.
 
-The main actor owns EventKit objects and serializes mutations. Framework fetch callbacks produce Sendable snapshots before returning to that actor. Fetches are cancellable, capped at four, and time out after 15 seconds. Other services have no adapters or advertised tools.
+`AppleAccess` is the small common interface for native enablement/permission controls. Reminders and Calendar share one lazily created `EKEventStore`; Contacts has one lazy `CNContactStore`. Disabled services do not construct/query native stores. Main-actor ownership serializes native object access and writes. EventKit reminder callbacks and MapKit callbacks convert objects to Sendable value records. Reminder fetches are capped at four with a 15-second timeout; Maps caps four requests with a 20-second cancellable timeout. Calendar range reads and Contacts enumeration are synchronous native operations and can briefly occupy the main actor; worker isolation is justified only if measured usage makes this a problem.
 
-`ReminderTools` uses SDK macros on typed functions/models to derive metadata, input/output schemas, and dispatch. `ToolDispatcher` owns availability enforcement and rejects unknown top-level arguments; Codable inputs reject unknown nested fields and explicit null. Clearing uses an explicit field list. There is no separate manual tool registry.
+Typed SDK macros on each service's tools/models generate metadata, schemas, and dispatch. `ToolDispatcher` composes the explicit modules through the SDK's tool-provider protocol plus availability. It rejects disabled tools and unknown top-level arguments; Codable inputs reject unknown nested fields and null. Adapter protocols exist for native implementations and test fakes, not dynamic plugins. No manual schema registry or generic action router.
 
-Read/create/edit/complete/reopen/move/delete use exact opaque identifiers. Patches validate before writing and refresh the target first. No retry or redirection to a default list. The same small date object is used on input/output, preserving date-only, floating, and named-zone semantics. Queries resolve the clock/timezone once, use native completion predicates, then filter text/dates and sort before paging. No Apple query result survives the call. See the requirements for the full tool contract and unavoidable concurrent-edit limitations.
+Shared helpers cover EventKit account/list access, dates, recurrence, display alarms, validation, and deletion receipts. Reminders/Calendar/Contacts keep their own record models and mutation semantics. Fetch returns compact summaries; get returns detail. No generic success/message envelope or duplicated account metadata in item results.
+
+Writes use exact opaque identifiers, validate before mutation, preserve omitted fields, and return the saved object. Recurring Calendar writes additionally require the original occurrence start and an explicit `thisEvent`/`futureEvents` span. Contacts fetches individual cards with `unifyResults = false`; no linked-card merge. List/group creation names an account. Native frameworks decide account support. No automatic retry or default destination.
+
+Queries are bounded/paginated but not snapshots. Reminders uses native completion filtering then text/date filtering; Calendar uses a bounded native range; Contacts stops enumeration after enough matching rows plus one. No Apple query result survives a call. See requirements for exact contracts and native feature limits. Reconnect clients after changing service enablement; the stateless transport does not broadcast discovery changes.
 
 ## Packaging and evidence
 
-`build-app.sh` builds an ad-hoc signed, unsandboxed development bundle, identity `io.github.huglyfe.imcp-http`, with a Reminders full-access usage description and dependency notices. It does not install a service, enable login launch, alter firewall rules, configure clients, or grant macOS permission. Production signing/notarization, permission stability across upgrades, and distribution remain unverified.
+`build-app.sh` builds an ad-hoc signed, unsandboxed development bundle, identity `io.github.huglyfe.imcp-http`, with Reminders/Calendar/Contacts usage descriptions and dependency notices. It does not install a service, enable login launch, alter firewall rules, configure clients, or grant macOS permission. Production signing/notarization, permission stability across upgrades, and distribution remain unverified.
 
-Automated evidence includes authorization/persistence failures, HTTP protocol boundaries, dispatch/date validation, exclusive app-state ownership, and an opt-in real Codex CLI 0.160.0 login/typed-query/fixture-move/restart/revoke test. The Codex fixture invokes the native decision API directly, uses a unique temporary credential, and creates no model turn. Native clicks and Apple-data acceptance remain manual gates. No automated test reads or mutates real reminders.
+Automated evidence includes authorization/persistence failures, HTTP protocol boundaries, dispatch/date validation, exclusive app-state ownership, and an opt-in real Codex CLI 0.160.0 login/typed Reminders, Calendar, Contacts, Maps fixture/restart/revoke test. The Codex fixture invokes the native decision API directly, uses a unique temporary credential, and creates no model turn. Native clicks and Apple-data acceptance remain manual gates. No automated test reads or mutates real Apple records or calls live Maps. Unsaved value objects, fake adapters, and isolated OAuth state verify the contracts without permission prompts.

@@ -19,6 +19,10 @@ struct ReminderQuery: Codable, Sendable {
   var completed: Bool?
   /// any (default), today, overdue, upcoming (tomorrow onward), or undated.
   var due: ReminderDueFilter?
+  /// Inclusive due boundary; cannot be combined with a due preset.
+  var dueFrom: AppleDate?
+  /// Exclusive due boundary.
+  var dueBefore: AppleDate?
   /// Timezone for date presets and sorting; defaults to the Mac's current timezone.
   var timeZone: String?
   /// id (default) or due (earliest first, undated last, stable ID tie breaker).
@@ -51,10 +55,24 @@ struct ReminderQuery: Codable, Sendable {
     } else {
       zone = defaultTimeZone
     }
+    if dueFrom != nil || dueBefore != nil {
+      guard due == nil || due == .any else {
+        throw invalidArguments("Use due boundaries or a preset, not both.")
+      }
+    }
+    _ = try dueFrom?.components(floatingTimeZone: zone)
+    _ = try dueBefore?.components(floatingTimeZone: zone)
+    let from = dueFrom?.instant(in: zone)
+    let before = dueBefore?.instant(in: zone)
+    if let from, let before, before <= from {
+      throw invalidArguments("dueBefore must be later than dueFrom.")
+    }
     return ResolvedReminderQuery(
       listIDs: listIDs, search: search,
-      completed: completed ?? (due == nil || due == .any ? nil : false),
-      due: due ?? .any, timeZone: zone, sort: sort ?? .id, offset: offset ?? 0,
+      completed: completed
+        ?? ((due == nil || due == .any) && from == nil && before == nil ? nil : false),
+      due: due ?? .any, dueFrom: from, dueBefore: before, timeZone: zone, sort: sort ?? .id,
+      offset: offset ?? 0,
       limit: limit ?? 100, now: now)
   }
 }
@@ -67,6 +85,8 @@ extension ReminderQuery {
     search = try values.optional(String.self, forKey: .search)
     completed = try values.optional(Bool.self, forKey: .completed)
     due = try values.optional(ReminderDueFilter.self, forKey: .due)
+    dueFrom = try values.optional(AppleDate.self, forKey: .dueFrom)
+    dueBefore = try values.optional(AppleDate.self, forKey: .dueBefore)
     timeZone = try values.optional(String.self, forKey: .timeZone)
     sort = try values.optional(ReminderSort.self, forKey: .sort)
     offset = try values.optional(Int.self, forKey: .offset)
@@ -80,6 +100,8 @@ struct ResolvedReminderQuery: Sendable {
   let search: String?
   let completed: Bool?
   let due: ReminderDueFilter
+  let dueFrom: Date?
+  let dueBefore: Date?
   let timeZone: TimeZone
   let sort: ReminderSort
   let offset: Int
@@ -107,6 +129,8 @@ struct ResolvedReminderQuery: Sendable {
         return nil
       }
       let instant = record.due?.instant(in: timeZone)
+      if let dueFrom { guard let instant, instant >= dueFrom else { return nil } }
+      if let dueBefore { guard let instant, instant < dueBefore else { return nil } }
       switch due {
       case .any: break
       case .undated: if record.due != nil { return nil }
@@ -128,7 +152,7 @@ struct ResolvedReminderQuery: Sendable {
     }
     let page = matching.dropFirst(offset).prefix(limit).map(\.0)
     return ReminderPage(
-      reminders: page, total: matching.count,
+      reminders: page.map(ReminderSummary.init), total: matching.count,
       nextOffset: offset + page.count < matching.count ? offset + page.count : nil,
       timeZone: timeZone.identifier)
   }

@@ -4,12 +4,13 @@ Agreed 2026-10-02; implementation updated 2026-10-03. Completed code and verifie
 
 ## Progress
 
-- Implemented: SwiftMCP + Hummingbird, loopback MCP, native OAuth consent, durable grants, refresh rotation, revocation, pause/start, service enablement, and Reminders list/search/fetch/get/create/edit/complete/reopen/move/delete.
-- Verified with Codex CLI 0.160.0: metadata discovery, PKCE login through a fixture invoking the native decision API, harmless connection check plus typed query/move calls against fake Reminders, server restart with persisted approval, and revoked tool rejection. No model turn or production client configuration was used.
-- Review follow-up: per-request protocol version context; SDK-derived typed tool contracts; stable date objects; selected-list text/completion/date queries and due sorting; explicit list moves; native recurrence/alarm flags.
-- Automated fixture tests cover OAuth failures/persistence, HTTP limits/Host/Origin, concurrent request IDs, service/permission gates, exact target dispatch, dates/DST boundaries, clearing fields, query validation/pagination, failed mutations, and version-dependent schemas/results.
-- Remaining release gates: native Approve/Deny clicks and window/menu behavior; real macOS permission flow; disposable Reminders create/edit/complete/reopen/readback/delete; signing/permission persistence; sleep/wake and measured idle memory. Other Apple services remain unimplemented.
-- Owner direction on 2026-10-03: a clean application design; choose libraries for this app, with no compatibility obligation to iMCP's architecture.
+- Implemented in the private draft: SwiftMCP + Hummingbird, loopback MCP, native OAuth consent, durable grants, refresh rotation, revoke, pause/start, and working service controls.
+- Version 0.4.0 expands to 36 typed tools: connection check; Reminders account/list/item management, search/date ranges, start/URL/location/time alarms/recurrence; Calendar account/calendar/occurrence management; Contacts card/group management; Maps search/routes.
+- Clean tool contracts: explicit write targets, compact fetch summaries, detail on get, saved records on writes, no prose success envelope. iMCP, apple-reminders-mcp, and remindctl source review is recorded in INSPIRATION.
+- Automated checks cover service gates, strict input/patch/date/recurrence validation, native value mapping, backward-compatible disabled defaults, OAuth/HTTP, and SDK schemas. The opt-in Codex fixture exercises all four services with fake data, restart, and revocation.
+- Remaining release gates: native Approve/Deny clicks, window/menu behavior, macOS permission flows, disposable records and cleanup, live Maps results, signing/permission persistence, sleep/wake, and measured idle memory. Computer-use app inspection currently fails with a native-pipe error; fixture tests do not replace this acceptance.
+- Remaining service slices: Location and Shortcuts next; Weather depends on developer signing/capabilities. Messages/Phone private-store access and Capture require separate product/permission decisions. No production integration cutover or public release.
+- Owner direction: independent clean application design, broad Apple coverage, simple parameters and minimal JSON results; no iMCP compatibility obligation.
 
 ## Product
 
@@ -79,7 +80,7 @@ Publish only after owner approval of visibility. Keep original notices for impor
 
 Codex on this Mac logs in once, lists enabled tools, edits and deletes a disposable reminder, reconnects after app restart, and loses access after revoke. The existing production integrations are replaced only after this proof and explicit cutover authorization.
 
-## Native acceptance checklist for this slice
+## Native acceptance checklist
 
 Still pending; fixture tests do not establish Apple-service acceptance. Use an isolated app state directory/port and an isolated client entry, then remove that entry and revoke its grant when finished. Never run an automated test against the owner's reminder data.
 
@@ -90,3 +91,8 @@ Still pending; fixture tests do not establish Apple-service acceptance. Use an i
 5. Edit title/notes/priority, clear notes/due with `clear`, complete/reopen, and verify unrelated native fields remain intact. Check a disposable recurring item separately before treating recurrence behavior as accepted.
 6. Move an item between the two lists, use its returned identifier, independently verify its destination in Reminders, and confirm the source no longer contains it. Verify missing/read-only destinations fail without a source change where such an account is available.
 7. Restart/reconnect; revoke and confirm subsequent calls fail. Delete only disposable items, independently verify absence, and remove the empty disposable lists. Record success or the exact remaining gate without storing account names/content or credentials.
+
+8. Enable Calendar independently. In disposable calendars, create timed and all-day events across a DST boundary; query/get/edit/move/delete them. For a disposable recurring series, verify `thisEvent` and `futureEvents` against native Calendar and verify stale start targets fail. Check shared/read-only account behavior without touching existing events. Remove disposable calendars and verify absence.
+9. Enable Contacts independently. Create disposable person and organization cards in an explicit account; verify names/phones/emails/URLs/addresses/unknown-year birthday, omitted-field preservation, and clearing. Create/rename a disposable group, add/remove the test card, verify membership and same-account failure, then remove the group/cards and verify absence. Do not test deletion on a unified personal card.
+10. Enable Maps without Location access. Search a public address near explicit coordinates; check a known driving/walking route and optional instructions. Disable it and verify stale tool calls fail. No personal device location is needed.
+11. Restart and confirm each saved service preference. Confirm newly added services remain disabled when loading an old Reminders-only settings fixture. Record exact outcomes, without account names, content, credentials, or screenshots of unrelated data.

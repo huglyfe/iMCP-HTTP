@@ -20,7 +20,10 @@ struct CodexAcceptanceTests {
         do {
           try await LocalServer(
             configuration: configuration, authorization: store,
-            dispatcher: ToolDispatcher(testReminders: FakeReminders())
+            dispatcher: ToolDispatcher(modules: [
+              ReminderTools(access: FakeReminders()), CalendarTools(access: FakeCalendar()),
+              ContactTools(access: FakeContacts()), MapTools(access: FakeMaps()),
+            ])
           ).run {
             continuation.yield(())
             continuation.finish()

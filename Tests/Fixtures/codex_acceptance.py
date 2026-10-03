@@ -32,6 +32,20 @@ def drain():
             pass
 threading.Thread(target=drain, daemon=True).start()
 
+def has_connection(value):
+    if isinstance(value, dict):
+        return (value.get("connected") is True and value.get("appleDataAccessed") is False) or any(has_connection(v) for v in value.values())
+    if isinstance(value, list):
+        return any(has_connection(v) for v in value)
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return has_connection(parsed) if not isinstance(parsed, str) else False
+        except ValueError:
+            return False
+    return False
+
+
 def send(method, params, id=None):
     message = {"jsonrpc": "2.0", "method": method, "params": params}
     if id is not None:
@@ -102,7 +116,7 @@ try:
     stage = "tool"
     send("mcpServer/tool/call", arguments, 5)
     result = response(5)
-    assert "connection verified" in json.dumps(result), "Tool did not run"
+    assert has_connection(result), "Tool did not run"
     stage = "typed Reminders fixture"
     assert any("reminders_fetch" in server.get("tools", {}) for server in servers), "Reminders schema not discovered"
     send("mcpServer/tool/call", {"threadId": thread, "server": name, "tool": "reminders_fetch",
@@ -113,17 +127,27 @@ try:
         "arguments": {"id": "fixture-id", "listID": "fixture-destination"}}, 9)
     moved = response(9)
     assert "moved-id" in json.dumps(moved) and "fixture-destination" in json.dumps(moved), "Fixture move failed"
+    for request_id, tool, tool_args, expected in [
+        (10, "calendar_edit", {"id": "fixture-event", "start": "2026-10-03T12:00:00Z", "span": "thisEvent", "changes": {"title": "Fixture edit"}}, "fixture-event"),
+        (11, "contacts_edit", {"id": "fixture-card", "changes": {"familyName": "Fixture edit"}}, "fixture-card"),
+        (12, "maps_directions", {"from": {"latitude": 0, "longitude": 0}, "to": {"latitude": 1, "longitude": 1}}, "distanceMeters"),
+    ]:
+        stage = tool + " fixture"
+        assert any(tool in server.get("tools", {}) for server in servers), "Tool schema not discovered"
+        send("mcpServer/tool/call", {"threadId": thread, "server": name, "tool": tool, "arguments": tool_args}, request_id)
+        called = response(request_id)
+        assert expected in json.dumps(called) and not called.get("isError"), "Typed tool failed"
     stage = "restart"
     control("restart")
     send("mcpServer/tool/call", arguments, 6)
-    assert "connection verified" in json.dumps(response(6)), "Restart lost approval"
+    assert has_connection(response(6)), "Restart lost approval"
     stage = "revoke"
     control("revoke")
     send("mcpServer/tool/call", arguments, 7)
     denied = receive(lambda m: m.get("id") == 7)
-    assert "connection verified" not in json.dumps(denied), "Revocation did not deny tool"
+    assert not has_connection(denied), "Revocation did not deny tool"
     assert "error" in denied or denied.get("result", {}).get("isError") is True, "No failure reported"
-    print("Real Codex: OAuth, discovery, typed query/move fixtures, restart, revocation passed.", flush=True)
+    print("Real Codex: OAuth, discovery, Reminders/Calendar/Contacts/Maps fixtures, restart, revocation passed.", flush=True)
 except Exception as error:
     # Error messages can include URLs or tokens. Report only the stage and type.
     print("Codex acceptance failed at " + stage + ": " + type(error).__name__, flush=True)

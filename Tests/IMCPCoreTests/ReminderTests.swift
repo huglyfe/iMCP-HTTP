@@ -7,20 +7,20 @@ import Testing
 struct ReminderTests {
   @Test func datesRoundTripWithoutFoundationDetails() throws {
     for date in [
-      ReminderDate(date: "2028-02-29"),
-      ReminderDate(date: "2026-10-03", time: "20:45:00", timeZone: "America/New_York"),
-      ReminderDate(date: "2026-10-03", time: "20:45:00"),
+      AppleDate(date: "2028-02-29"),
+      AppleDate(date: "2026-10-03", time: "20:45:00", timeZone: "America/New_York"),
+      AppleDate(date: "2026-10-03", time: "20:45:00"),
     ] {
       let components = try date.components()
-      check(ReminderDate(components: components) == date)
+      check(AppleDate(components: components) == date)
       let data = try JSONEncoder().encode(date)
-      check(try JSONDecoder().decode(ReminderDate.self, from: data) == date)
+      check(try JSONDecoder().decode(AppleDate.self, from: data) == date)
       let json = try JSONDictionary(encoding: date)
       check(Set(json.keys).isSubset(of: ["date", "time", "timeZone"]))
     }
-    let day = try ReminderDate(date: "2028-02-29").components()
+    let day = try AppleDate(date: "2028-02-29").components()
     check(day.hour == nil && day.timeZone == nil)
-    let zoned = try ReminderDate(
+    let zoned = try AppleDate(
       date: "2026-10-03", time: "20:45:00", timeZone: "America/New_York"
     ).components()
     check(zoned.day == 3 && zoned.hour == 20 && zoned.timeZone?.identifier == "America/New_York")
@@ -28,14 +28,14 @@ struct ReminderTests {
 
   @Test func rejectsMalformedDatesAndDSTGaps() async throws {
     for date in [
-      ReminderDate(date: ""), ReminderDate(date: "2026-02-29"),
-      ReminderDate(date: "2026-04-31"), ReminderDate(date: "2026-00-01"),
-      ReminderDate(date: "2026-10-03\n"), ReminderDate(date: "2026-10-03", time: "25:00:00"),
-      ReminderDate(date: "2026-10-03", timeZone: "GMT"),
-      ReminderDate(date: "2026-10-03", time: "09:00:00", timeZone: "invalid"),
-      ReminderDate(date: "2026-03-08", time: "02:30:00", timeZone: "America/New_York"),
+      AppleDate(date: ""), AppleDate(date: "2026-02-29"),
+      AppleDate(date: "2026-04-31"), AppleDate(date: "2026-00-01"),
+      AppleDate(date: "2026-10-03\n"), AppleDate(date: "2026-10-03", time: "25:00:00"),
+      AppleDate(date: "2026-10-03", timeZone: "GMT"),
+      AppleDate(date: "2026-10-03", time: "09:00:00", timeZone: "invalid"),
+      AppleDate(date: "2026-03-08", time: "02:30:00", timeZone: "America/New_York"),
     ] { await expectFailure { try date.components() } }
-    _ = try ReminderDate(
+    _ = try AppleDate(
       date: "2026-11-01", time: "01:30:00", timeZone: "America/New_York"
     ).components()
   }
@@ -69,7 +69,7 @@ struct ReminderTests {
   @Test func serviceGatesPatchesAndMoves() async throws {
     let service = FakeReminders()
     let dispatcher = ToolDispatcher(testReminders: service)
-    check(await dispatcher.tools().count == 8)
+    check(await dispatcher.tools().count == 12)
     _ = try await dispatcher.call(
       "reminders_edit",
       arguments: ["id": "exact-item", "changes": ["completed": true, "clear": ["due"]]])
@@ -124,7 +124,7 @@ struct ReminderTests {
     // Spring transition day is 23 hours; tomorrow must be a calendar day, not +86400.
     let zone = TimeZone(identifier: "America/New_York")!
     let now = ISO8601DateFormatter().date(from: "2026-03-08T16:00:00Z")!
-    func item(_ id: String, _ date: ReminderDate?, completed: Bool = false, list: String = "list")
+    func item(_ id: String, _ date: AppleDate?, completed: Bool = false, list: String = "list")
       -> ReminderRecord
     {
       ReminderRecord(
@@ -172,8 +172,8 @@ struct ReminderTests {
     native.day = 3
     native.hour = 9
     check(
-      ReminderDate(components: native)
-        == ReminderDate(date: "2026-10-03", time: "09:00:00", timeZone: "GMT"))
+      AppleDate(components: native)
+        == AppleDate(date: "2026-10-03", time: "09:00:00", timeZone: "GMT"))
     let now = ISO8601DateFormatter().date(from: "2026-11-01T17:00:00Z")!
     let late = ReminderRecord(
       id: "late", listID: "list", title: "Fixture", notes: "needle",
@@ -219,6 +219,16 @@ final class FakeReminders: ReminderAccess {
   var failure: ToolFailure?
   func setAvailable(_ value: Bool) { available = value }
   func setFailure(_ value: ToolFailure) { failure = value }
+  func accounts() throws -> AppleAccounts { AppleAccounts(accounts: []) }
+  func createList(accountID: String, title: String) throws -> AppleList {
+    AppleList(
+      id: "list", title: title, account: "Fixture", accountID: accountID, writable: true,
+      editable: true)
+  }
+  func renameList(id: String, title: String) throws -> AppleList {
+    try createList(accountID: "account", title: title)
+  }
+  func deleteList(id: String) throws { writes.append("delete-list:" + id) }
   func lists() throws -> [ReminderList] { [] }
   func fetch(_ query: ResolvedReminderQuery) async throws -> ReminderPage {
     reads += 1

@@ -2,8 +2,46 @@ import Darwin
 import Foundation
 
 public struct ServiceSettings: Codable, Sendable {
-  public let remindersEnabled: Bool
-  public init(remindersEnabled: Bool = false) { self.remindersEnabled = remindersEnabled }
+  public var remindersEnabled: Bool
+  public var calendarEnabled: Bool
+  public var contactsEnabled: Bool
+  public var mapsEnabled: Bool
+  public init(
+    remindersEnabled: Bool = false, calendarEnabled: Bool = false, contactsEnabled: Bool = false,
+    mapsEnabled: Bool = false
+  ) {
+    self.remindersEnabled = remindersEnabled
+    self.calendarEnabled = calendarEnabled
+    self.contactsEnabled = contactsEnabled
+    self.mapsEnabled = mapsEnabled
+  }
+  public init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    remindersEnabled = try values.decodeIfPresent(Bool.self, forKey: .remindersEnabled) ?? false
+    calendarEnabled = try values.decodeIfPresent(Bool.self, forKey: .calendarEnabled) ?? false
+    contactsEnabled = try values.decodeIfPresent(Bool.self, forKey: .contactsEnabled) ?? false
+    mapsEnabled = try values.decodeIfPresent(Bool.self, forKey: .mapsEnabled) ?? false
+  }
+  public subscript(service: AppleService) -> Bool {
+    get {
+      switch service {
+      case .reminders: remindersEnabled
+      case .calendar: calendarEnabled
+      case .contacts: contactsEnabled
+      case .maps: mapsEnabled
+      default: false
+      }
+    }
+    set {
+      switch service {
+      case .reminders: remindersEnabled = newValue
+      case .calendar: calendarEnabled = newValue
+      case .contacts: contactsEnabled = newValue
+      case .maps: mapsEnabled = newValue
+      default: break
+      }
+    }
+  }
   public static func load(from url: URL) throws -> ServiceSettings {
     guard FileManager.default.fileExists(atPath: url.path) else { return ServiceSettings() }
     return try JSONDecoder().decode(Self.self, from: Data(contentsOf: url))

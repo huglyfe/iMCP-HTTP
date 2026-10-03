@@ -12,7 +12,11 @@ struct MCPContractTests {
     let tokens = try await f.tokens()
     let grant = try await f.store.authenticate("Bearer \(tokens.accessToken)")
     let gateway = MCPGateway(
-      authorization: f.store, dispatcher: ToolDispatcher(testReminders: FakeReminders()))
+      authorization: f.store,
+      dispatcher: ToolDispatcher(modules: [
+        ReminderTools(access: FakeReminders()), CalendarTools(access: FakeCalendar()),
+        ContactTools(access: FakeContacts()), MapTools(access: FakeMaps()),
+      ]))
     func request(_ method: String, version: String?, params: JSONDictionary? = nil) async throws
       -> MCPGateway.Reply
     {
@@ -56,7 +60,7 @@ struct MCPContractTests {
       check(changes["due"]?.dictionaryValue?["properties"]?.dictionaryValue?["date"] != nil)
       check(
         changes["clear"]?.dictionaryValue?["items"]?.dictionaryValue?["enum"]?.arrayValue == [
-          "notes", "due",
+          "notes", "due", "start", "url", "location",
         ])
       let fetched = try result(
         await request(

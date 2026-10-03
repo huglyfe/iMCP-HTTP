@@ -4,7 +4,7 @@ import SwiftMCP
 /// The wire format and EventKit boundary share one date model. No Foundation
 /// calendar/locale serialization leaks into tool results.
 @Schema
-struct ReminderDate: Codable, Sendable, Equatable {
+struct AppleDate: Codable, Sendable, Equatable {
   /// Gregorian date, exactly YYYY-MM-DD.
   let date: String
   /// Optional local clock time, exactly HH:MM:SS. Omit for a date-only deadline.
@@ -98,7 +98,7 @@ struct ReminderDate: Codable, Sendable, Equatable {
   }
 }
 
-extension ReminderDate {
+extension AppleDate {
   init(date: String, time: String? = nil, timeZone: String? = nil) {
     self.date = date
     self.time = time

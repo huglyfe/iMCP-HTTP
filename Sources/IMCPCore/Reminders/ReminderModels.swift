@@ -1,19 +1,8 @@
 import Foundation
 import SwiftMCP
 
-@Schema
-struct ReminderList: Codable, Sendable {
-  let id: String
-  let title: String
-  let account: String
-  let accountID: String
-  let writable: Bool
-}
-
-@Schema
-struct ReminderLists: Codable, Sendable {
-  let lists: [ReminderList]
-}
+typealias ReminderList = AppleList
+typealias ReminderLists = AppleLists
 
 @Schema
 struct ReminderRecord: Codable, Sendable {
@@ -23,29 +12,47 @@ struct ReminderRecord: Codable, Sendable {
   let notes: String?
   let priority: Int
   let completed: Bool
-  let due: ReminderDate?
-  /// Existing recurrence and alarms are preserved, but are not editable yet.
-  var isRecurring: Bool = false
-  var hasAlarms: Bool = false
+  let due: AppleDate?
+  var start: AppleDate?
+  var url: String?
+  var location: String?
+  var recurrence: [RepeatRule]?
+  var alarms: [TimeAlarm]?
+  var otherAlarms: Int?
+
+}
+
+@Schema
+struct ReminderSummary: Codable, Sendable {
+  let id: String
+  let listID: String
+  let title: String
+  let priority: Int
+  let completed: Bool
+  let due: AppleDate?
+  init(_ record: ReminderRecord) {
+    id = record.id
+    listID = record.listID
+    title = record.title
+    priority = record.priority
+    completed = record.completed
+    due = record.due
+  }
 }
 
 @Schema
 struct ReminderPage: Codable, Sendable {
-  let reminders: [ReminderRecord]
+  let reminders: [ReminderSummary]
   let total: Int
   let nextOffset: Int?
   /// The resolved timezone used for date filtering and sorting.
   let timeZone: String
 }
 
-@Schema
-struct ReminderDeletion: Codable, Sendable {
-  let deleted: Bool
-  let id: String
-}
+typealias ReminderDeletion = Deletion
 
 enum ReminderClearField: String, Codable, CaseIterable, Hashable, Sendable {
-  case notes, due
+  case notes, due, start, url, location
 }
 
 @Schema
@@ -54,7 +61,14 @@ struct ReminderChanges: Codable, Sendable {
   var title: String?
   /// At most 16384 UTF-8 bytes. Omit to preserve; use clear to remove.
   var notes: String?
-  var due: ReminderDate?
+  var due: AppleDate?
+  var start: AppleDate?
+  var url: String?
+  var location: String?
+  /// Replace the native schedule; [] removes recurrence.
+  var recurrence: [RepeatRule]?
+  /// Replace display alarms; [] removes them. Other alarm types are preserved.
+  var alarms: [TimeAlarm]?
   /// Integer 0 through 9; 0 means none, 1 is highest.
   var priority: Int?
   /// True completes the reminder; false reopens it.
@@ -77,15 +91,22 @@ struct ReminderChanges: Codable, Sendable {
     }
     let fields = clear ?? []
     guard Set(fields).count == fields.count,
-      !(fields.contains(.notes) && notes != nil), !(fields.contains(.due) && due != nil)
+      !(fields.contains(.notes) && notes != nil), !(fields.contains(.due) && due != nil),
+      !(fields.contains(.start) && start != nil), !(fields.contains(.url) && url != nil),
+      !(fields.contains(.location) && location != nil)
     else {
       throw invalidArguments("Do not assign and clear the same field or repeat clear fields.")
     }
     guard
       title != nil || notes != nil || due != nil || priority != nil || completed != nil
+        || start != nil || url != nil || location != nil || recurrence != nil || alarms != nil
         || !fields.isEmpty
     else { throw invalidArguments("Provide at least one change.") }
     if let due { _ = try due.components() }
+    if let start { _ = try start.components() }
+    try validateURL(url)
+    if (location?.utf8.count ?? 0) > 1024 { throw invalidArguments("Location is too long.") }
+    try EventOptions.validate(alarms: alarms, recurrence: recurrence)
   }
 }
 
@@ -95,7 +116,12 @@ extension ReminderChanges {
     let values = try decoder.container(keyedBy: CodingKeys.self)
     title = try values.optional(String.self, forKey: .title)
     notes = try values.optional(String.self, forKey: .notes)
-    due = try values.optional(ReminderDate.self, forKey: .due)
+    due = try values.optional(AppleDate.self, forKey: .due)
+    start = try values.optional(AppleDate.self, forKey: .start)
+    url = try values.optional(String.self, forKey: .url)
+    location = try values.optional(String.self, forKey: .location)
+    recurrence = try values.optional([RepeatRule].self, forKey: .recurrence)
+    alarms = try values.optional([TimeAlarm].self, forKey: .alarms)
     priority = try values.optional(Int.self, forKey: .priority)
     completed = try values.optional(Bool.self, forKey: .completed)
     clear = try values.optional([ReminderClearField].self, forKey: .clear)
@@ -105,6 +131,10 @@ extension ReminderChanges {
 @MainActor
 protocol ReminderAccess: Sendable {
   var available: Bool { get }
+  func accounts() throws -> AppleAccounts
+  func createList(accountID: String, title: String) throws -> AppleList
+  func renameList(id: String, title: String) throws -> AppleList
+  func deleteList(id: String) throws
   func lists() throws -> [ReminderList]
   func fetch(_ query: ResolvedReminderQuery) async throws -> ReminderPage
   func get(id: String) throws -> ReminderRecord
@@ -112,39 +142,4 @@ protocol ReminderAccess: Sendable {
   func edit(id: String, changes: ReminderChanges) throws -> ReminderRecord
   func move(id: String, listID: String) throws -> ReminderRecord
   func delete(id: String) throws
-}
-
-func invalidArguments(_ message: String) -> ToolFailure {
-  ToolFailure("invalid_arguments", message)
-}
-
-func validateIdentifier(_ id: String) throws {
-  guard !id.isEmpty, id.utf8.count <= 1024 else {
-    throw invalidArguments("An exact, nonempty identifier of at most 1024 UTF-8 bytes is required.")
-  }
-}
-
-// Codable normally ignores unknown fields and treats null as absent. Tool inputs
-// deliberately reject both: misspellings must not turn a requested edit into a no-op.
-private struct InputKey: CodingKey {
-  var stringValue: String
-  var intValue: Int? { nil }
-  init?(stringValue: String) { self.stringValue = stringValue }
-  init?(intValue: Int) { return nil }
-}
-
-extension Decoder {
-  func rejectUnknownFields<Key: CodingKey>(_ type: Key.Type) throws {
-    let values = try container(keyedBy: InputKey.self)
-    guard values.allKeys.allSatisfy({ Key(stringValue: $0.stringValue) != nil }) else {
-      throw invalidArguments("Unknown field. Consult the tool schema.")
-    }
-  }
-}
-
-extension KeyedDecodingContainer {
-  func optional<T: Decodable>(_ type: T.Type, forKey key: Key) throws -> T? {
-    guard contains(key) else { return nil }
-    return try decode(type, forKey: key)
-  }
 }

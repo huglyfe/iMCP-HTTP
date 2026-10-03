@@ -2,7 +2,7 @@
 
 A native Mac app that gives approved AI clients access to Apple services over MCP Streamable HTTP. One process, a main window, and a menu-bar control.
 
-**Development implementation:** loopback HTTP, native OAuth approval, durable client grants, pause/revoke, and EventKit Reminders tools. Real Codex login, tool use, restart, and revocation are tested. Native UI, macOS permission prompts, and real disposable Reminders writes still need manual acceptance. This repository remains private.
+**Development implementation:** loopback HTTP, native OAuth approval, durable client grants, pause/revoke, and native Reminders, Calendar, Contacts, and Maps tools. Real Codex login, fixture tool calls, restart, and revocation are tested. Native UI, macOS permission prompts, and real disposable Apple-service writes still need manual acceptance. This repository remains private.
 
 ## Develop
 
@@ -13,7 +13,7 @@ Requires macOS 15+ and Swift 6.2+ with Swift Testing and `swift format` (current
 open dist/iMCP-HTTP.app
 ```
 
-Use `./scripts/build-app.sh release` for an optimized development bundle. Bundles are ad-hoc signed, unsandboxed development apps under ignored `dist/`, not notarized releases. EventKit access remains governed by macOS permission and the app's service switch. Production signing and permission persistence across upgrades are release gates.
+Use `./scripts/build-app.sh release` for an optimized development bundle. Bundles are ad-hoc signed, unsandboxed development apps under ignored `dist/`, not notarized releases. Apple data access remains governed by macOS permission and the app's service switch. Production signing and permission persistence across upgrades are release gates.
 
 ## Connect Codex
 
@@ -28,39 +28,43 @@ Approve the pending request in the app. The registered public client ID is `code
 
 Approval lasts until revoked. Tokens expire after 15 minutes and refresh without a new approval. Pause stops access; closing the window keeps the menu-bar app running. Revoke prevents subsequent calls and refresh. Existing calls may already have completed.
 
-Enable Reminders explicitly in the app and accept the macOS permission prompt. Approved clients then share access across this Mac user's available Reminders accounts. Reconnect clients after changing services to refresh their tool list. There is no per-list policy editor.
+Enable each service explicitly in the app and accept its macOS permission prompt when needed. Approved clients share access across this Mac user's available accounts. Maps uses supplied locations and does not request device location. Reconnect clients after changing services to refresh their tool list. There is no per-list policy editor.
 
 ## Tools
 
-`connection_check` never accesses Apple data. When Reminders is enabled and macOS permits access:
+36 typed tools are implemented. Discovery includes only enabled, available services. Reads return compact JSON summaries; get and mutations return detail; deletion returns `{deleted, id}`. Exact identifiers target writes. No prose success envelopes or implicit default accounts.
 
-| Tool | Behavior |
+| Service | Operations |
 | --- | --- |
-| `reminders_lists` | List exact list/account identifiers and write availability |
-| `reminders_fetch` | Search selected lists by text, completion, due presets; sort and paginate |
-| `reminders_get` | Read an exact item, including completed items |
-| `reminders_create` | Create in an explicit list; title required |
-| `reminders_edit` | Patch title, notes, due date, priority, completion |
-| `reminders_move` | Move an exact item to a writable destination list |
-| `reminders_delete` | Delete the exact item |
+| Connection | `connection_check`, with no Apple access |
+| Reminders | Accounts; list/create/rename/delete lists; fetch/get/create/edit/move/delete reminders; completion, date ranges, URLs, start dates, display alarms, recurrence |
+| Calendar | Accounts; list/create/rename/delete calendars; fetch/get/create/edit/move/delete exact occurrences; all-day events, recurrence, alarms, availability |
+| Contacts | Accounts; search/get/create/edit/delete individual cards; names, organizations, labeled values, addresses, birthdays; groups and membership |
+| Maps | Place/address search; driving/walking distance and travel time; optional instructions |
 
-Example tool arguments:
+Example arguments:
 
 ```json
 {"query":{"listIDs":["<list-id>"],"due":"overdue","timeZone":"America/New_York","sort":"due"}}
 ```
 
 ```json
-{"id":"<reminder-id>","changes":{"due":{"date":"2026-10-03","time":"09:00:00","timeZone":"America/New_York"}}}
+{"id":"<reminder-id>","changes":{"completed":true,"clear":["due"]}}
 ```
 
-Clear a field with `{"id":"<reminder-id>","changes":{"clear":["due"]}}`. Date-only deadlines omit `time` and `timeZone`. These typed schemas replace the earlier unreleased string-date/null-clearing contract; reconnect existing development clients.
+```json
+{"id":"<event-id>","start":"2026-10-03T13:00:00Z","span":"thisEvent","changes":{"title":"Updated title"}}
+```
 
-See [Reminders contract](docs/REQUIREMENTS.md#implemented-reminders-contract) for clearing fields, dates, pagination, and error behavior. Other Apple services are not implemented.
+```json
+{"accountID":"<contacts-account-id>","search":"Alex","limit":10}
+```
+
+See [tool contracts](docs/REQUIREMENTS.md#common-tool-contract) for fields, dates, recurrence, clearing, pagination, and native limitations. Version 0.4.0 changes unreleased schemas/results; reconnect development clients. Location, Shortcuts, Weather, Messages/Phone, and Capture remain future slices; the [prior-art review](docs/INSPIRATION.md#coverage-and-remaining-boundaries) records their API/permission constraints.
 
 ## Verification
 
-The canonical check runs fixture tests, a real HTTP listener test, formatting, build, bundle metadata/signature, and whitespace checks. Automated tests never read or write real reminders.
+The canonical check runs fixture tests, a real HTTP listener test, formatting, build, bundle metadata/signature, and whitespace checks. Automated tests never read or write real Apple records or call live Maps.
 
 Optional real Codex acceptance requires `codex` and `python3` on PATH and access to the local keyring:
 
@@ -68,7 +72,7 @@ Optional real Codex acceptance requires `codex` and `python3` on PATH and access
 IMCP_RUN_CODEX_ACCEPTANCE=1 ./scripts/check.sh
 ```
 
-It uses isolated temporary state, a unique test credential, and an ephemeral Codex session with no model turns. It approves through the native decision API, tests OAuth, typed Reminders query/move tools against fake data, restart, and revocation, then logs out the test credential. It does not verify clicking the native UI or alter production Codex configuration. Listener tests use ports 19765 and 19767.
+It uses isolated temporary state, a unique test credential, and an ephemeral Codex session with no model turns. It approves through the native decision API, tests OAuth, typed Reminders/Calendar/Contacts/Maps tools against fake data, restart, and revocation, then logs out the test credential. It does not verify clicking the native UI or alter production Codex configuration. Listener tests use ports 19765 and 19767.
 
 For isolated manual acceptance, launch the bundle executable with `IMCP_HTTP_DATA_DIR` set to a temporary directory and `IMCP_HTTP_PORT` set to another loopback port. Keep these development overrides out of production launch configuration.
 
@@ -76,7 +80,7 @@ For isolated manual acceptance, launch the bundle executable with `IMCP_HTTP_DAT
 
 - [Plan](docs/PLAN.md): scope, progress, and remaining acceptance gates.
 - [Architecture](docs/ARCHITECTURE.md): SDK choice, ownership, protocol and storage.
-- [Requirements](docs/REQUIREMENTS.md): behavior and Reminders contract.
+- [Requirements](docs/REQUIREMENTS.md): behavior and tool contracts.
 - [Prior art](docs/INSPIRATION.md) and [agent guide](AGENTS.md).
 
 MIT licensed application code; dependencies retain their licenses. See [third-party notices](THIRD_PARTY_NOTICES.md). Independent of iMCP and Apple; no hosted account or subscription.

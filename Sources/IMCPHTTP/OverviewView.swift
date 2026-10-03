@@ -66,11 +66,24 @@ struct OverviewView: View {
 
         GroupBox("Services") {
           VStack(alignment: .leading, spacing: 8) {
-            Label("Connection test available", systemImage: "checkmark.circle")
+            ForEach(AppRuntime.services) { service in
+              Toggle(
+                isOn: Binding(
+                  get: { runtime.settings[service] },
+                  set: { enabled in Task { await runtime.setEnabled(service, enabled) } }
+                )
+              ) {
+                VStack(alignment: .leading, spacing: 2) {
+                  Text(service.title)
+                  Text(runtime.serviceStatus[service] ?? "Disabled").font(.caption).foregroundStyle(
+                    .secondary)
+                }
+              }.disabled(runtime.changingService != nil)
+            }
             Text(
-              "The connection test does not access Apple data. Reminders and other Apple services are not enabled yet."
+              "Enabled services are available to every approved client. Reconnect clients after changing services."
             )
-            .font(.callout).foregroundStyle(.secondary)
+            .font(.caption).foregroundStyle(.secondary)
           }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
         }
 

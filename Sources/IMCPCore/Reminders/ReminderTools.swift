@@ -8,23 +8,47 @@ final class ReminderTools: Sendable {
   let access: any ReminderAccess
   init(access: any ReminderAccess) { self.access = access }
 
+  /// List Reminders accounts. Account support for new lists varies.
+  @MCPTool(hints: [.readOnly, .idempotent])
+  func remindersAccounts() async throws -> AppleAccounts { try await access.accounts() }
+
+  /// Create a list in an exact account.
+  @MCPTool
+  func remindersListCreate(accountID: String, title: String) async throws -> AppleList {
+    try validateIdentifier(accountID)
+    try validateTitle(title)
+    return try await access.createList(accountID: accountID, title: title)
+  }
+
+  /// Rename an exact list.
+  @MCPTool(hints: [.destructive])
+  func remindersListRename(id: String, title: String) async throws -> AppleList {
+    try validateIdentifier(id)
+    try validateTitle(title)
+    return try await access.renameList(id: id, title: title)
+  }
+
+  /// Delete an exact list and all its reminders.
+  @MCPTool(hints: [.destructive])
+  func remindersListDelete(id: String) async throws -> Deletion {
+    try validateIdentifier(id)
+    try await access.deleteList(id: id)
+    return Deletion(deleted: true, id: id)
+  }
+
   /// List Reminders lists with exact identifiers, account context, and write availability.
   @MCPTool(hints: [.readOnly, .idempotent])
   func remindersLists() async throws -> ReminderLists {
     ReminderLists(lists: try await access.lists())
   }
 
-  /// Search selected lists by title/notes, completion, and due dates. Today includes the
-  /// whole local day; overdue includes past timed deadlines and date-only deadlines
-  /// before today; upcoming starts tomorrow. Date presets default to incomplete items.
-  /// Pagination is not a snapshot: restart at zero after changes. No Apple data is cached.
+  /// Search selected lists. Due presets default to incomplete; upcoming starts tomorrow.
   @MCPTool(hints: [.readOnly, .idempotent])
   func remindersFetch(query: ReminderQuery) async throws -> ReminderPage {
     try await access.fetch(query.resolve())
   }
 
-  /// Read one exact reminder, including completed items. Recurrence/alarm flags describe
-  /// native fields that are preserved but not yet editable.
+  /// Read one exact reminder, including completed items.
   @MCPTool(hints: [.readOnly, .idempotent])
   func remindersGet(id: String) async throws -> ReminderRecord {
     try validateIdentifier(id)
@@ -40,9 +64,7 @@ final class ReminderTools: Sendable {
     return try await access.create(listID: listID, changes: changes)
   }
 
-  /// Patch an exact reminder. Omitted fields are preserved; clear removes notes/due.
-  /// Completed true/false completes/reopens. Native recurring reminders follow Apple
-  /// recurrence behavior. Read back after an uncertain outcome before retrying.
+  /// Edit an exact reminder. Omission preserves fields; clear removes them. Set completed to complete/reopen.
   @MCPTool(hints: [.destructive])
   func remindersEdit(id: String, changes: ReminderChanges) async throws -> ReminderRecord {
     try validateIdentifier(id)
@@ -50,9 +72,7 @@ final class ReminderTools: Sendable {
     return try await access.edit(id: id, changes: changes)
   }
 
-  /// Move one exact reminder to an exact writable destination list. Both lists must be
-  /// writable. Returns the saved reminder: its identifier can change across accounts.
-  /// Re-fetch the source and destination after an uncertain outcome before retrying.
+  /// Move a reminder to an exact list. Use the returned id afterward.
   @MCPTool(hints: [.destructive])
   func remindersMove(id: String, listID: String) async throws -> ReminderRecord {
     try validateIdentifier(id)
@@ -60,8 +80,7 @@ final class ReminderTools: Sendable {
     return try await access.move(id: id, listID: listID)
   }
 
-  /// Permanently delete the exact reminder. Native recurring reminders follow Apple's
-  /// deletion behavior. Verify absence after an interrupted call before retrying.
+  /// Delete an exact reminder using native recurrence behavior.
   @MCPTool(hints: [.destructive])
   func remindersDelete(id: String) async throws -> ReminderDeletion {
     try validateIdentifier(id)

@@ -26,11 +26,26 @@ final class AppRuntime: ObservableObject {
   let configuration: ServerConfiguration
   private let storeURL: URL
   private var authorization: AuthorizationStore?
-  let reminders = EventKitReminders()
-  @Published private(set) var remindersEnabled = false
-  @Published private(set) var remindersStatus = "Disabled"
-  @Published private(set) var changingReminders = false
-  private lazy var dispatcher = ToolDispatcher(reminders: reminders)
+  static let services: [AppleService] = [.reminders, .calendar, .contacts, .maps]
+  private let eventStore = EventKitStore()
+  private lazy var reminders = EventKitReminders(eventStore: eventStore)
+  private lazy var calendar = EventKitCalendar(eventStore: eventStore)
+  private lazy var contacts = NativeContacts()
+  private lazy var maps = NativeMaps()
+  @Published private(set) var settings = ServiceSettings()
+  @Published private(set) var serviceStatus: [AppleService: String] = [:]
+  @Published private(set) var changingService: AppleService?
+  private lazy var dispatcher = ToolDispatcher(
+    reminders: reminders, calendar: calendar, contacts: contacts, maps: maps)
+  private func access(_ service: AppleService) -> any AppleAccess {
+    switch service {
+    case .reminders: reminders
+    case .calendar: calendar
+    case .contacts: contacts
+    case .maps: maps
+    default: preconditionFailure("Unimplemented service")
+    }
+  }
   private var directoryLock: StateDirectoryLock?
   private var settingsLoaded = false
   private var hasStarted = false
@@ -67,10 +82,11 @@ final class AppRuntime: ObservableObject {
         directoryLock = try StateDirectoryLock(directory: storeURL.deletingLastPathComponent())
       }
       if !settingsLoaded {
-        let enabled = try ServiceSettings.load(from: settingsURL).remindersEnabled
-        reminders.setEnabled(enabled)
-        remindersEnabled = enabled
-        remindersStatus = reminders.status
+        settings = try ServiceSettings.load(from: settingsURL)
+        for service in Self.services {
+          access(service).setEnabled(settings[service])
+          serviceStatus[service] = access(service).status
+        }
         settingsLoaded = true
       }
       if authorization == nil {
@@ -112,7 +128,9 @@ final class AppRuntime: ObservableObject {
         let clients = await authorization.clients()
         self?.approvals = pending
         self?.clients = clients
-        self?.remindersStatus = self?.reminders.status ?? "Disabled"
+        if let self {
+          for service in Self.services { self.serviceStatus[service] = self.access(service).status }
+        }
         do { try await Task.sleep(for: .seconds(1)) } catch { return }
       }
     }
@@ -150,20 +168,22 @@ final class AppRuntime: ObservableObject {
     storeURL.deletingLastPathComponent().appendingPathComponent("services.json")
   }
 
-  func setRemindersEnabled(_ enabled: Bool) async {
-    guard settingsLoaded, !changingReminders else { return }
-    changingReminders = true
-    defer { changingReminders = false }
+  func setEnabled(_ service: AppleService, _ enabled: Bool) async {
+    guard settingsLoaded, changingService == nil else { return }
+    changingService = service
+    defer { changingService = nil }
     do {
-      if enabled, !(try await reminders.requestAccess()) {
+      if enabled, !(try await access(service).requestAccess()) {
         errorMessage =
-          "Reminders access was not granted. You can allow it in System Settings → Privacy & Security → Reminders."
+          "Access was not granted. Allow \(service.title) in System Settings → Privacy & Security."
         return
       }
-      try ServiceSettings(remindersEnabled: enabled).save(to: settingsURL)
-      reminders.setEnabled(enabled)
-      remindersEnabled = enabled
-      remindersStatus = reminders.status
+      var updated = settings
+      updated[service] = enabled
+      try updated.save(to: settingsURL)
+      access(service).setEnabled(enabled)
+      settings = updated
+      serviceStatus[service] = access(service).status
     } catch {
       errorMessage =
         "The service setting could not be saved or permission could not be requested. Pause the server if you need to stop access."

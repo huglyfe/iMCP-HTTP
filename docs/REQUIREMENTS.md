@@ -43,7 +43,7 @@ These are product contracts. Current implementation and verification limits are 
 - Date-only deadlines remain date-only. Timed deadlines preserve the documented timezone behavior.
 - Delete operates on the exact identified item, including completed reminders. Return success only after framework confirmation; subsequent read verifies absence during acceptance.
 - Re-fetch before mutation where needed to avoid overwriting unrelated native fields; document any unavoidable concurrency limitations.
-- Native subtasks, tags, sections, recurrence editing, and bulk operations are later feasibility/implementation slices. Never emulate native features in notes without explicit product agreement.
+- Native subtasks, tags, sections, and bulk operations remain outside the implemented public-API contract. Never emulate native features in notes without explicit product agreement.
 
 ## Verification
 
@@ -59,26 +59,86 @@ Manual acceptance uses Codex and disposable Apple data: prove successful behavio
 
 Consult current specifications during implementation; record the tested protocol and client versions with acceptance evidence.
 
-## Implemented Reminders contract
+## Common tool contract
 
-Calls require an active grant, global Reminders enablement, and current full EventKit authorization. All accounts/lists available to the current macOS user share that permission. Services are checked on dispatch and again inside the adapter. Disabled tools cannot be invoked directly by name.
+Tools return JSON objects, with no prose success envelope. Fetch returns compact records and an optional `nextOffset`; get/create/edit/move return the supported detail record. Optional absent values are omitted. Account labels and write capabilities belong to list/account discovery, not every item. Deletes return `{ "deleted": true, "id": "..." }` after framework confirmation.
 
-- `reminders_lists`: no arguments; returns `lists` with `id`, `title`, `account`, `accountID`, `writable`.
-- `reminders_fetch`: required `query` object. `listIDs` contains 1–50 distinct exact list IDs. Optional `search` is a nonempty substring (at most 512 UTF-8 bytes) matched against title/notes without case or diacritic sensitivity. `completed` selects a state; omitted means both unless a due preset is selected, which defaults to incomplete.
-- Query `due` accepts `any` (default), `today`, `overdue`, `upcoming`, or `undated`. Today is the full local day. Overdue means a timed deadline before the captured current instant, or a date-only deadline before today. Upcoming starts tomorrow; undated means no due date. Optional `timeZone` is a Foundation-recognized identifier such as `America/New_York`, defaulting to the Mac's current timezone. Calendar arithmetic handles daylight-saving transitions.
-- Query `sort` accepts `id` (default) or `due` (ascending, undated last, ID breaks ties). `offset` is 0–100000 (default 0); `limit` is 1–200 (default 100). Returns `reminders`, `total`, optional `nextOffset`, and resolved `timeZone`. Filters precede sorting and pagination. Pages are not snapshots: restart after mutations. EventKit completion predicates narrow reads; text and due filtering use snapshots in the query timezone. EventKit has no text/offset predicate, so each page still reads all reminders matching the native predicate. No result database/cache.
-- `reminders_get`: required exact `id`. Includes completed items. Records expose `isRecurring` and `hasAlarms`; the associated native settings are preserved but not yet editable.
-- `reminders_create`: required `listID` and `changes` object with a nonempty `title`.
-- `reminders_edit`: required exact `id` and nonempty `changes`. Fields are `title`, `notes`, `due`, `priority`, `completed`, and `clear`. Omission preserves the field. `clear` is an array containing `notes` and/or `due`; duplicate entries and assigning a field while clearing it are rejected. Null values are rejected. Title is at most 1024 UTF-8 bytes; notes at most 16384. Priority is an integer 0–9 (0 none, 1 highest). Completed true/false completes/reopens.
-- `reminders_move`: required exact `id` and destination `listID`. Both source and destination must be writable. Moving to the current list returns the item without saving. The saved result is authoritative: an account change can change the item ID. On uncertain outcomes, inspect both lists before retrying.
-- `reminders_delete`: required exact `id`; success is `{deleted: true, id: ...}` only after EventKit confirms removal. A missing/stale ID fails, including after a previous successful delete.
+Use exact identifiers returned by discovery. No fuzzy write targeting, implicit default destination, automatic retry, or bulk writes. Omission preserves a patch field; explicit null and unknown fields fail. `clear` removes optional scalar fields. Replacement arrays use `[]` to clear. Contacts text fields clear with an empty string. Pages are not snapshots: restart after mutations.
 
-Due input and output share a small object: `{ "date": "2026-10-03" }` for date-only; `{ "date": "2026-10-03", "time": "09:00:00", "timeZone": "America/New_York" }` for a zoned deadline. Omitting `timeZone` with `time` represents a floating local deadline. A timezone requires a time. Strict Gregorian dates and HH:MM:SS times are validated before mutation; nonexistent DST times fail. Repeated fall-back times follow Foundation's resolution. Named zones are retained rather than normalized to UTC. Existing native calendars are converted to Gregorian for output. Nil notes/due fields are omitted; no Foundation calendar/locale internals appear on the wire.
+Titles are nonempty and at most 1024 UTF-8 bytes; notes at most 16384. Searches are nonempty substrings up to 512 bytes, ignoring case and diacritics. Fetch limits are 1–200 (default 100), offsets 0–100000 (default 0). List/calendar selection accepts 1–50 distinct IDs. Maps has a smaller 1–20 result limit.
 
-This unreleased contract replaces the initial string due dates, null-based clearing, and flat single-list fetch arguments. Reconnect clients to refresh schemas. There is no legacy argument alias layer.
+Calls require an active OAuth grant and current service availability. EventKit and Contacts writes are serialized on the main actor. Native stores remain authoritative; there is no atomic compare-and-swap against another app's edits. A failed or interrupted write may have an uncertain outcome: read back before retrying. Errors carry MCP `isError` and `_meta.errorCode` when the handler ran; no private framework error details are logged or returned.
 
-Unknown fields and incorrect types fail before mutation. No default list fallback, recurrence editing, alarm editing, tags, sections, subtasks, or bulk writes. Completion and deletion of existing recurring reminders use native EventKit behavior; occurrence-versus-series controls remain unimplemented and require native acceptance. Existing unrelated EventKit fields are left alone. The adapter refreshes the exact object before patching, but EventKit does not provide an atomic compare-and-swap against concurrent edits from other apps.
+## Reminders
 
-Writes are serialized on the main actor without automatic retries. EventKit errors return `write_failed` and instruct readback before retrying because no success was confirmed. Unsaved cached object changes are reset after a failure. HTTP disconnect or process termination during a write can leave an unknown outcome. Read and inspect the target/list before any retry.
+| Tools | Arguments / result |
+| --- | --- |
+| `reminders_accounts`, `reminders_lists` | Discover accounts and lists (`writable` contents, `editable` list metadata). Account support for list creation varies. |
+| `reminders_list_create` | `accountID`, `title` → saved list |
+| `reminders_list_rename` | `id`, `title` → saved list |
+| `reminders_list_delete` | `id` → deletes the list **and its contents** |
+| `reminders_fetch` | `query` → `reminders`, `total`, optional `nextOffset`, resolved `timeZone` |
+| `reminders_get` | `id` → detail |
+| `reminders_create` | `listID`, `changes` with `title` → saved reminder |
+| `reminders_edit` | `id`, `changes` → saved reminder |
+| `reminders_move` | `id`, `listID` → saved reminder; use its returned ID afterward |
+| `reminders_delete` | `id` → deletion |
 
-Tool failures carry a readable message, MCP `isError`, and `_meta.errorCode` where the tool handler ran. Codes include `invalid_arguments`, `unknown_tool`, `service_unavailable`, `service_disabled`, `permission_denied`, `not_found`, `read_only`, `write_failed`, `read_failed`, `busy`, and `timeout`. SDK-level validation may report its own MCP error before dispatch. Reads are limited to four concurrent EventKit fetches with a 15-second cancellable timeout.
+`query` requires `listIDs`. Optional fields: `search` (title/notes), `completed`, `due`, `dueFrom`, `dueBefore`, `timeZone`, `sort`, `offset`, `limit`. `due` is `any`, `today`, `overdue`, `upcoming`, or `undated`. Today is the full local day; overdue is past timed deadlines or date-only deadlines before today; upcoming begins tomorrow. Alternatively, use inclusive `dueFrom` / exclusive `dueBefore`. Date filters default to incomplete reminders. Sort is `id` or `due` (ascending, undated last, ID ties). EventKit narrows by completion; app filtering/paging reads that matching set without caching it.
+
+`changes` supports `title`, `notes`, `due`, `start`, `url`, `location`, `priority` (0–9), `completed`, `alarms`, `recurrence`, and `clear`. Set `completed` true/false to complete/reopen. Clearable scalars: notes, due, start, url, location. Fetch summaries include ID/list/title/priority/completion/due; get adds the optional details.
+
+Dates use `{ "date": "2026-10-03" }`, or `{ "date": "2026-10-03", "time": "09:00:00", "timeZone": "America/New_York" }`. Time without a zone is floating; a zone requires a time. Gregorian dates and HH:MM:SS are strict; nonexistent DST times fail. Repeated fall-back times use Foundation's resolution. Date-only values stay date-only; native non-Gregorian dates are converted on read.
+
+Reminders recurrence/completion/deletion follows EventKit's native reminder behavior. EventKit offers no reminder occurrence/series scope; the server does not invent one. Tags, subtasks, sections, Smart Lists, geofence editing, and attachment editing are unsupported.
+
+## Calendar
+
+`calendar_accounts`, `calendar_lists`, `calendar_list_create`, `calendar_list_rename`, and `calendar_list_delete` follow the corresponding Reminders list contracts, with list deletion removing all contained events.
+
+| Tool | Arguments |
+| --- | --- |
+| `calendar_fetch` | `calendarIDs`, `start`, `end`; optional `search`, `offset`, `limit` |
+| `calendar_get` | `id`, `start` from a fetched occurrence |
+| `calendar_create` | `calendarID`, `changes` |
+| `calendar_edit` | `id`, original `start`, explicit `span`, `changes` |
+| `calendar_move` | `id`, original `start`, explicit `span`, destination `calendarID` |
+| `calendar_delete` | `id`, original `start`, explicit `span` |
+
+Fetch returns occurrences overlapping the supplied positive range (at most 366 days), sorted by start then ID. Search matches title, notes, or location. Results contain `events` and optional `nextOffset`. Get and mutations return detail. Exact ID plus start identifies a recurring occurrence; stale/moved occurrences fail instead of falling back to the first event in the series.
+
+`span` is `thisEvent` or `futureEvents` (selected occurrence onward). Recurrence edits on a repeating event require `futureEvents`. EventKit may notify attendees when shared events change. Attendee/invitation editing is not supported.
+
+`changes`: title, start, end, timeZone, allDay, notes, location, url, availability, alarms, recurrence, clear. Create requires title/start/end/timeZone. Changing any schedule field requires start/end/timeZone together. Start/end are ISO 8601 timestamps with seconds and an explicit UTC offset; timeZone is a named Foundation timezone retained for recurrence. End is exclusive and after start. All-day boundaries must be midnight in that zone, including across DST. Availability is busy/free/tentative/unavailable. Clearable scalars: notes/location/url.
+
+## Alarms and recurrence
+
+Shared by Reminders and Calendar. `alarms` replaces display time alarms, up to eight. Each is `{ "at": "2026-10-03T13:00:00Z" }` or `{ "offsetSeconds": -900 }`. Relative alarms use the item's start; new relative reminder alarms require a start date. `[]` removes display time alarms. Existing geofence, audio, email, or procedure alarms are preserved and counted in `otherAlarms` on detail reads. Native accounts may restrict/truncate alarms; the saved object is authoritative.
+
+`recurrence` replaces the native schedule with up to one rule; `[]` removes it. A rule requires frequency daily/weekly/monthly/yearly. Optional interval defaults to 1. Optional weekdays use Sunday=1 through Saturday=7 and an optional signed ordinal `week`. Selectors include monthDays, months, yearWeeks, yearDays, and positions. Only frequency-compatible combinations are accepted; signed selectors exclude zero. Optional `until` (inclusive timestamp) and `count` are mutually exclusive. Reads include native rule details; no change preserves rules verbatim. Replacing a rule creates a Gregorian EventKit rule with native week-start defaults. Non-Gregorian calendars and custom week-start preservation during replacement are not promised.
+
+## Contacts
+
+| Tools | Arguments / result |
+| --- | --- |
+| `contacts_accounts` | Available account IDs and names |
+| `contacts_fetch` | `accountID`; optional `search`, `groupID`, `offset`, `limit` → name/phone/email summaries and optional nextOffset |
+| `contacts_get` | Exact `id` → supported contact details |
+| `contacts_create` | `accountID`, `changes` → saved card |
+| `contacts_edit`, `contacts_delete` | Exact `id` (and `changes` for edit) |
+| `contacts_groups` | `accountID` → group IDs/names |
+| `contacts_group_create` | `accountID`, `name` → saved group |
+| `contacts_group_rename` | `id`, `name` → saved group |
+| `contacts_group_delete` | `id` → removes group, preserves contacts |
+| `contacts_group_membership` | `contactID`, `groupID`, `member` → resulting membership; one account only |
+
+Reads and writes use individual stored cards (`unifyResults = false`), retaining organization-only contacts and avoiding implicit linked-card edits. Fetch enumerates only the account/group, applies search to names/phones/emails, and stops after the page plus one result. No global count or address-book mirror.
+
+Fields: givenName, middleName, familyName, prefix, suffix, nickname, organization, department, jobTitle, phones, emails, urls, addresses, birthday. Phone/email/URL values are `{label?, value}`; arrays replace the entire field. Address fields are label/street/city/state/postalCode/country/countryCode. Birthday is `{month, day, year?}`; unknown years remain absent. `clear: ["birthday"]` removes it. Create requires givenName, familyName, or organization. Unfetched fields are preserved. Photos, contact notes, linked-card merging, cross-account moves, and Smart Groups are unsupported. Account/group write support is decided by Contacts on save.
+
+## Maps
+
+- `maps_search(query, near?, limit=10)`: places with name/address/coordinates and optional phone/URL. `near` is `{latitude, longitude}` and biases a 10 km region. Without it, the request uses a world region; no device-location request.
+- `maps_directions(from, to, mode=driving, includeSteps=false)`: distanceMeters/travelSeconds and optional instruction steps. Mode is driving or walking; endpoints are coordinates.
+
+Maps is independently enabled and sends supplied queries/coordinates to Apple. It does not require Location permission. Four concurrent requests maximum; native requests are cancelled on caller cancellation or after 20 seconds. Network failures return errors. Transit, live device location, map images, and reverse geocoding remain outside this slice.

@@ -75,7 +75,7 @@ private struct RequestServer: MCPServer, MCPToolProviding {
   let dispatcher: ToolDispatcher
   let grant: UUID
   var serverName: String { "iMCP-HTTP" }
-  var serverVersion: String { "0.3.0" }
+  var serverVersion: String { "0.4.0" }
   var mcpToolMetadata: [MCPToolMetadata] {
     get async {
       guard (try? await authorization.requireActive(grant)) != nil else { return [] }
