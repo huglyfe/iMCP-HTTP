@@ -7,6 +7,7 @@ import json
 import pathlib
 import queue
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -62,6 +63,12 @@ def control(action):
             raise TimeoutError("Fixture did not respond")
         time.sleep(0.05)
 
+def terminate(signum, frame):
+    # Swift may terminate a failing/timed-out fixture. Still run the finally block
+    # so the child app-server exits and its test-only keyring credential is removed.
+    raise SystemExit(1)
+
+signal.signal(signal.SIGTERM, terminate)
 stage = "initialize"
 try:
     send("initialize", {"clientInfo": {"name": "imcp-http-test", "version": "1"},
