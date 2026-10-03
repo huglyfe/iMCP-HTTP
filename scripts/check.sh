@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 
 swift format lint --strict --recursive Package.swift Sources Tests
 bash -n scripts/build-app.sh scripts/check.sh
-swift test -j 2 --disable-xctest "${@}"
+swift test -j 2 --disable-xctest "$@"
 ./scripts/build-app.sh debug
 plutil -lint dist/iMCP-HTTP.app/Contents/Info.plist
 codesign --verify --strict dist/iMCP-HTTP.app
