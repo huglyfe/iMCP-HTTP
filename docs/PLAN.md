@@ -4,9 +4,10 @@ Agreed 2026-10-02; implementation updated 2026-10-03. Completed code and verifie
 
 ## Progress
 
-- Implemented: SwiftMCP + Hummingbird, loopback MCP, native OAuth consent, durable grants, refresh rotation, revocation, pause/start, service enablement, and Reminders list/fetch/get/create/edit/complete/reopen/delete.
-- Verified with Codex CLI 0.160.0: metadata discovery, PKCE login through a fixture invoking the native decision API, harmless tool call, server restart with persisted approval, and revoked tool rejection. No model turn or production client configuration was used.
-- Automated fixture tests cover OAuth failures/persistence, HTTP limits/Host/Origin, concurrent request IDs, service/permission gates, exact target dispatch, dates, clearing fields, and failed writes.
+- Implemented: SwiftMCP + Hummingbird, loopback MCP, native OAuth consent, durable grants, refresh rotation, revocation, pause/start, service enablement, and Reminders list/search/fetch/get/create/edit/complete/reopen/move/delete.
+- Verified with Codex CLI 0.160.0: metadata discovery, PKCE login through a fixture invoking the native decision API, harmless connection check plus typed query/move calls against fake Reminders, server restart with persisted approval, and revoked tool rejection. No model turn or production client configuration was used.
+- Review follow-up: per-request protocol version context; SDK-derived typed tool contracts; stable date objects; selected-list text/completion/date queries and due sorting; explicit list moves; native recurrence/alarm flags.
+- Automated fixture tests cover OAuth failures/persistence, HTTP limits/Host/Origin, concurrent request IDs, service/permission gates, exact target dispatch, dates/DST boundaries, clearing fields, query validation/pagination, failed mutations, and version-dependent schemas/results.
 - Remaining release gates: native Approve/Deny clicks and window/menu behavior; real macOS permission flow; disposable Reminders create/edit/complete/reopen/readback/delete; signing/permission persistence; sleep/wake and measured idle memory. Other Apple services remain unimplemented.
 - Owner direction on 2026-10-03: a clean application design; choose libraries for this app, with no compatibility obligation to iMCP's architecture.
 
@@ -77,3 +78,15 @@ Publish only after owner approval of visibility. Keep original notices for impor
 ## First useful release gate
 
 Codex on this Mac logs in once, lists enabled tools, edits and deletes a disposable reminder, reconnects after app restart, and loses access after revoke. The existing production integrations are replaced only after this proof and explicit cutover authorization.
+
+## Native acceptance checklist for this slice
+
+Still pending; fixture tests do not establish Apple-service acceptance. Use an isolated app state directory/port and an isolated client entry, then remove that entry and revoke its grant when finished. Never run an automated test against the owner's reminder data.
+
+1. Verify native Approve and Deny for separate login attempts, pause/start, close/reopen, and Quit. Enable Reminders through the native macOS permission flow.
+2. Create two visibly named disposable lists in Reminders, for example `iMCP acceptance source <timestamp>` and `iMCP acceptance destination <timestamp>`. Discover their exact IDs; do not use an owner's existing list as an implicit target.
+3. Create identifiable disposable reminders with a date-only deadline, a named-zone timed deadline, and no due date. Verify each in Reminders and through `reminders_get`.
+4. Search the selected lists by a unique test-title prefix; verify today/overdue/upcoming/undated, completion filtering, due sort, and pagination against those items. Include a DST boundary fixture when practical.
+5. Edit title/notes/priority, clear notes/due with `clear`, complete/reopen, and verify unrelated native fields remain intact. Check a disposable recurring item separately before treating recurrence behavior as accepted.
+6. Move an item between the two lists, use its returned identifier, independently verify its destination in Reminders, and confirm the source no longer contains it. Verify missing/read-only destinations fail without a source change where such an account is available.
+7. Restart/reconnect; revoke and confirm subsequent calls fail. Delete only disposable items, independently verify absence, and remove the empty disposable lists. Record success or the exact remaining gate without storing account names/content or credentials.

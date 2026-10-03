@@ -103,6 +103,16 @@ try:
     send("mcpServer/tool/call", arguments, 5)
     result = response(5)
     assert "connection verified" in json.dumps(result), "Tool did not run"
+    stage = "typed Reminders fixture"
+    assert any("reminders_fetch" in server.get("tools", {}) for server in servers), "Reminders schema not discovered"
+    send("mcpServer/tool/call", {"threadId": thread, "server": name, "tool": "reminders_fetch",
+        "arguments": {"query": {"listIDs": ["fixture-list"], "due": "today", "sort": "due"}}}, 8)
+    queried = response(8)
+    assert "reminders" in json.dumps(queried) and "timeZone" in json.dumps(queried), "Typed query failed"
+    send("mcpServer/tool/call", {"threadId": thread, "server": name, "tool": "reminders_move",
+        "arguments": {"id": "fixture-id", "listID": "fixture-destination"}}, 9)
+    moved = response(9)
+    assert "moved-id" in json.dumps(moved) and "fixture-destination" in json.dumps(moved), "Fixture move failed"
     stage = "restart"
     control("restart")
     send("mcpServer/tool/call", arguments, 6)
@@ -113,7 +123,7 @@ try:
     denied = receive(lambda m: m.get("id") == 7)
     assert "connection verified" not in json.dumps(denied), "Revocation did not deny tool"
     assert "error" in denied or denied.get("result", {}).get("isError") is True, "No failure reported"
-    print("Real Codex: OAuth, discovery, tool call, restart, revocation passed.", flush=True)
+    print("Real Codex: OAuth, discovery, typed query/move fixtures, restart, revocation passed.", flush=True)
 except Exception as error:
     # Error messages can include URLs or tokens. Report only the stage and type.
     print("Codex acceptance failed at " + stage + ": " + type(error).__name__, flush=True)

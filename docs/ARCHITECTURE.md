@@ -22,7 +22,7 @@ SwiftMCP 1.13.0 provides JSON-RPC models/decoding, protocol negotiation, MCP dis
 
 The released official Swift MCP SDK 0.12.1 was tested against Codex's `experimental: {"codex/auth-change": {}}` initialize payload and rejected it because its capability values are strings. SwiftMCP accepts it. No dependency fork or inbound payload rewriting is required.
 
-SwiftMCP's optional Server/Client/OpenAPI traits are disabled. Its built-in transport's cached session authorization and synchronous authorization callback do not fit this app's durable native approval actor. A small stateless adapter joins the SDK to Hummingbird and authenticates every request. It advertises no tool-list notifications because this transport cannot deliver them. There is no extra proxy, daemon, legacy SSE endpoint, custom JSON-RPC decoder, or Apple-data mirror.
+SwiftMCP's Server and OpenAPI traits are disabled. Its Client trait is enabled because version 1.13.0's `@MCPServer` macro always generates a typed client, even with `generateClient: false`. This uses the supported SDK surface without a fork; the application does not instantiate that client or launch subprocesses. Its built-in transport's cached session authorization and synchronous authorization callback do not fit this app's durable native approval actor. A small stateless adapter joins the SDK to Hummingbird and authenticates every request. It advertises no tool-list notifications because this transport cannot deliver them. There is no extra proxy, daemon, legacy SSE endpoint, custom JSON-RPC decoder, or Apple-data mirror.
 
 CryptoKit supplies SHA-256 and Security supplies secure random bytes. The S256 helper is adapted with the upstream license retained; see notices. Authorization policy and native consent are app code; no library is assumed to provide a native authorization server.
 
@@ -31,10 +31,12 @@ CryptoKit supplies SHA-256 and Security supplies secure random bytes. The S256 h
 - Bind `127.0.0.1:18765`; issuer `http://127.0.0.1:18765`; resource `/mcp`. The real Codex acceptance test proves this same-Mac HTTP profile. It is not a remote-deployment design.
 - Exact Host validation; supplied Origin must equal issuer. Native requests without Origin work. No CORS grant.
 - Stateless Streamable HTTP: authenticated POST with JSON response; accepted notifications return 202; GET/SSE returns 405. No resumable sessions, server-initiated requests, subscriptions, or asynchronous job protocol.
-- SwiftMCP negotiates `2025-11-25`, `2025-06-18`, or `2025-03-26`. Present `MCP-Protocol-Version` headers must name a supported version. A request-local server isolates concurrent JSON-RPC IDs; no shared peer/request table.
+- SwiftMCP negotiates `2025-11-25`, `2025-06-18`, or `2025-03-26`. Present `MCP-Protocol-Version` headers must name a supported version. Each request binds a fresh SDK `Session` context to the HTTP version (missing header defaults to `2025-03-26`), so output schemas and structured results follow that version. Initialization still negotiates from its body. Body `_meta` cannot override the HTTP version. The context is discarded after the request; no session IDs or shared request table are exposed.
 - Limits: 32 connections, HTTP idle timeout 10 seconds, 16 KiB aggregate headers, 8 KiB individual header/URI, 64 headers, 64 KiB MCP body, 8 KiB token body. HTTP parsing stays in Hummingbird/NIO.
 - Responses prohibit caching and referrer leakage; approval HTML denies embedded resources/framing. No access/request/Apple-content logger.
 - App startup reports Running only from the listener's ready callback. Bind errors remain errors. Address reuse permits immediate restart after socket shutdown, without enabling port sharing. A state-directory lease prevents multiple app writers even while paused.
+
+The version fallback follows the [2025-11-25 Streamable HTTP specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#protocol-version-header).
 
 ## Authorization and storage
 
@@ -54,10 +56,12 @@ Reminders starts disabled. Enable requests full EventKit access using the bundle
 
 The main actor owns EventKit objects and serializes mutations. Framework fetch callbacks produce Sendable snapshots before returning to that actor. Fetches are cancellable, capped at four, and time out after 15 seconds. Other services have no adapters or advertised tools.
 
-Read/create/edit/complete/reopen/delete use exact opaque identifiers. Patches validate before writing and refresh the target first. No retry or redirection to a default list. Date-only components stay date-only; timed inputs normalize to UTC. See the requirements for the full tool contract and unavoidable concurrent-edit limitations.
+`ReminderTools` uses SDK macros on typed functions/models to derive metadata, input/output schemas, and dispatch. `ToolDispatcher` owns availability enforcement and rejects unknown top-level arguments; Codable inputs reject unknown nested fields and explicit null. Clearing uses an explicit field list. There is no separate manual tool registry.
+
+Read/create/edit/complete/reopen/move/delete use exact opaque identifiers. Patches validate before writing and refresh the target first. No retry or redirection to a default list. The same small date object is used on input/output, preserving date-only, floating, and named-zone semantics. Queries resolve the clock/timezone once, use native completion predicates, then filter text/dates and sort before paging. No Apple query result survives the call. See the requirements for the full tool contract and unavoidable concurrent-edit limitations.
 
 ## Packaging and evidence
 
 `build-app.sh` builds an ad-hoc signed, unsandboxed development bundle, identity `io.github.huglyfe.imcp-http`, with a Reminders full-access usage description and dependency notices. It does not install a service, enable login launch, alter firewall rules, configure clients, or grant macOS permission. Production signing/notarization, permission stability across upgrades, and distribution remain unverified.
 
-Automated evidence includes authorization/persistence failures, HTTP protocol boundaries, dispatch/date validation, exclusive app-state ownership, and an opt-in real Codex CLI 0.160.0 login/tool/restart/revoke test. The Codex fixture invokes the native decision API directly, uses a unique temporary credential, and creates no model turn. Native clicks and Apple-data acceptance remain manual gates. No automated test reads or mutates real reminders.
+Automated evidence includes authorization/persistence failures, HTTP protocol boundaries, dispatch/date validation, exclusive app-state ownership, and an opt-in real Codex CLI 0.160.0 login/typed-query/fixture-move/restart/revoke test. The Codex fixture invokes the native decision API directly, uses a unique temporary credential, and creates no model turn. Native clicks and Apple-data acceptance remain manual gates. No automated test reads or mutates real reminders.

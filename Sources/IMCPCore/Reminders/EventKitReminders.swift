@@ -66,9 +66,19 @@ public final class EventKitReminders: ReminderAccess {
   }
   func get(id: String) throws -> ReminderRecord { Self.record(try reminder(id)) }
 
-  func fetch(listID: String, completed: Bool?, offset: Int, limit: Int) async throws -> ReminderPage
-  {
-    let calendar = try calendar(listID)
+  func fetch(_ query: ResolvedReminderQuery) async throws -> ReminderPage {
+    let calendars = try query.listIDs.map { try calendar($0) }
+    let predicate: NSPredicate
+    switch query.completed {
+    case false:
+      predicate = store.predicateForIncompleteReminders(
+        withDueDateStarting: nil, ending: nil, calendars: calendars)
+    case true:
+      predicate = store.predicateForCompletedReminders(
+        withCompletionDateStarting: nil, ending: nil, calendars: calendars)
+    case nil:
+      predicate = store.predicateForReminders(in: calendars)
+    }
     guard activeFetches < 4 else {
       throw ToolFailure("busy", "Too many Reminders reads are in progress. Try again shortly.")
     }
@@ -78,8 +88,7 @@ public final class EventKitReminders: ReminderAccess {
     let records = try await withTaskCancellationHandler {
       try await withCheckedThrowingContinuation { continuation in
         fetch.continuation = continuation
-        fetch.request = store.fetchReminders(matching: store.predicateForReminders(in: [calendar]))
-        { reminders in
+        fetch.request = store.fetchReminders(matching: predicate) { reminders in
           let records = reminders?.map(Self.record)
           Task { @MainActor in fetch.finish(records) }
         }
@@ -94,25 +103,33 @@ public final class EventKitReminders: ReminderAccess {
       Task { @MainActor in fetch.cancel(CancellationError()) }
     }
     try requireAccess()
-    let matching = records.filter { completed == nil || $0.completed == completed }.sorted {
-      $0.id < $1.id
-    }
-    let page = Array(matching.dropFirst(offset).prefix(limit))
-    return ReminderPage(
-      reminders: page, total: matching.count,
-      nextOffset: offset + page.count < matching.count ? offset + page.count : nil)
+    // EventKit has no text search or offset predicate. Native completion filtering
+    // narrows the fetch; date-only/floating semantics are evaluated consistently in
+    // the query timezone before pagination. Nothing is retained between calls.
+    return query.page(records)
   }
 
   func create(listID: String, changes: ReminderChanges) throws -> ReminderRecord {
+    try changes.validate(creating: true)
     let calendar = try calendar(listID, writing: true)
     let reminder = EKReminder(eventStore: store)
     reminder.calendar = calendar
-    apply(changes, to: reminder)
+    try apply(changes, to: reminder)
     return try save(reminder)
   }
   func edit(id: String, changes: ReminderChanges) throws -> ReminderRecord {
+    try changes.validate()
     let reminder = try reminder(id, writing: true)
-    apply(changes, to: reminder)
+    try apply(changes, to: reminder)
+    return try save(reminder)
+  }
+  func move(id: String, listID: String) throws -> ReminderRecord {
+    let destination = try calendar(listID, writing: true)
+    let reminder = try reminder(id, writing: true)
+    if reminder.calendar.calendarIdentifier == destination.calendarIdentifier {
+      return Self.record(reminder)
+    }
+    reminder.calendar = destination
     return try save(reminder)
   }
   func delete(id: String) throws {
@@ -132,18 +149,14 @@ public final class EventKitReminders: ReminderAccess {
     }
     return Self.record(reminder)
   }
-  private func apply(_ changes: ReminderChanges, to reminder: EKReminder) {
+  private func apply(_ changes: ReminderChanges, to reminder: EKReminder) throws {
+    // Resolve the entire update before mutating the EventKit object.
+    let due = try changes.due?.components()
     if let title = changes.title { reminder.title = title }
-    switch changes.notes {
-    case .unchanged: break
-    case .clear: reminder.notes = nil
-    case .set(let value): reminder.notes = value
-    }
-    switch changes.due {
-    case .unchanged: break
-    case .clear: reminder.dueDateComponents = nil
-    case .set(let value): reminder.dueDateComponents = value
-    }
+    if let notes = changes.notes { reminder.notes = notes }
+    if changes.clear?.contains(.notes) == true { reminder.notes = nil }
+    if let due { reminder.dueDateComponents = due }
+    if changes.clear?.contains(.due) == true { reminder.dueDateComponents = nil }
     if let priority = changes.priority { reminder.priority = priority }
     if let completed = changes.completed { reminder.isCompleted = completed }
   }
@@ -151,7 +164,8 @@ public final class EventKitReminders: ReminderAccess {
     ReminderRecord(
       id: reminder.calendarItemIdentifier, listID: reminder.calendar.calendarIdentifier,
       title: reminder.title ?? "", notes: reminder.notes, priority: reminder.priority,
-      completed: reminder.isCompleted, due: reminder.dueDateComponents)
+      completed: reminder.isCompleted, due: ReminderDate(components: reminder.dueDateComponents),
+      isRecurring: reminder.hasRecurrenceRules, hasAlarms: reminder.hasAlarms)
   }
 }
 

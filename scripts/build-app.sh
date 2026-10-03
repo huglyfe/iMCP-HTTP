@@ -25,7 +25,8 @@ for dependency in .build/checkouts/*; do
         if [[ -f "$notice" ]]; then
             destination="$notices/$(basename "$dependency")"
             mkdir -p "$destination"
-            cp "$notice" "$destination/"
+            # SwiftPM license files may be read-only; replace a previous copied notice.
+            cp -f "$notice" "$destination/"
         fi
     done
 done

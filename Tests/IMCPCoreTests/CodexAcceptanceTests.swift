@@ -19,7 +19,8 @@ struct CodexAcceptanceTests {
       let task = Task {
         do {
           try await LocalServer(
-            configuration: configuration, authorization: store, dispatcher: ToolDispatcher()
+            configuration: configuration, authorization: store,
+            dispatcher: ToolDispatcher(testReminders: FakeReminders())
           ).run {
             continuation.yield(())
             continuation.finish()

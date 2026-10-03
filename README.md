@@ -37,11 +37,24 @@ Enable Reminders explicitly in the app and accept the macOS permission prompt. A
 | Tool | Behavior |
 | --- | --- |
 | `reminders_lists` | List exact list/account identifiers and write availability |
-| `reminders_fetch` | Paginate one list; optionally filter completed items |
+| `reminders_fetch` | Search selected lists by text, completion, due presets; sort and paginate |
 | `reminders_get` | Read an exact item, including completed items |
 | `reminders_create` | Create in an explicit list; title required |
 | `reminders_edit` | Patch title, notes, due date, priority, completion |
+| `reminders_move` | Move an exact item to a writable destination list |
 | `reminders_delete` | Delete the exact item |
+
+Example tool arguments:
+
+```json
+{"query":{"listIDs":["<list-id>"],"due":"overdue","timeZone":"America/New_York","sort":"due"}}
+```
+
+```json
+{"id":"<reminder-id>","changes":{"due":{"date":"2026-10-03","time":"09:00:00","timeZone":"America/New_York"}}}
+```
+
+Clear a field with `{"id":"<reminder-id>","changes":{"clear":["due"]}}`. Date-only deadlines omit `time` and `timeZone`. These typed schemas replace the earlier unreleased string-date/null-clearing contract; reconnect existing development clients.
 
 See [Reminders contract](docs/REQUIREMENTS.md#implemented-reminders-contract) for clearing fields, dates, pagination, and error behavior. Other Apple services are not implemented.
 
@@ -55,7 +68,7 @@ Optional real Codex acceptance requires `codex` and `python3` on PATH and access
 IMCP_RUN_CODEX_ACCEPTANCE=1 ./scripts/check.sh
 ```
 
-It uses isolated temporary state, a unique test credential, and an ephemeral Codex session with no model turns. It approves through the native decision API, tests OAuth/tool use/restart/revoke, then logs out the test credential. It does not verify clicking the native UI or alter production Codex configuration. Listener tests use ports 19765 and 19767.
+It uses isolated temporary state, a unique test credential, and an ephemeral Codex session with no model turns. It approves through the native decision API, tests OAuth, typed Reminders query/move tools against fake data, restart, and revocation, then logs out the test credential. It does not verify clicking the native UI or alter production Codex configuration. Listener tests use ports 19765 and 19767.
 
 For isolated manual acceptance, launch the bundle executable with `IMCP_HTTP_DATA_DIR` set to a temporary directory and `IMCP_HTTP_PORT` set to another loopback port. Keep these development overrides out of production launch configuration.
 

@@ -38,7 +38,13 @@ struct MCPGateway: Sendable {
       return Reply(status: .badRequest, data: try JSONEncoder().encode(failure))
     }
     let server = RequestServer(authorization: authorization, dispatcher: dispatcher, grant: grant)
-    let response = await server.handleMessage(message)
+    // The SDK reads the protocol from its task-local session. Use a request-local
+    // context, not a retained HTTP session, to preserve stateless/concurrent dispatch.
+    // Missing headers default to the original Streamable HTTP revision per the spec.
+    let context = Session(id: UUID())
+    await context.setNegotiatedProtocolVersion(
+      headers[HTTPField.Name("MCP-Protocol-Version")!] ?? MCPProtocolVersion.fallbackHTTP)
+    let response = await context.work { _ in await server.handleMessage(message) }
     guard var response else { return Reply(status: .accepted) }
     // Capability delivery belongs to the transport. The SDK defaults to a
     // persistent connection; this stateless transport cannot deliver list changes.
@@ -69,7 +75,7 @@ private struct RequestServer: MCPServer, MCPToolProviding {
   let dispatcher: ToolDispatcher
   let grant: UUID
   var serverName: String { "iMCP-HTTP" }
-  var serverVersion: String { "0.2.0" }
+  var serverVersion: String { "0.3.0" }
   var mcpToolMetadata: [MCPToolMetadata] {
     get async {
       guard (try? await authorization.requireActive(grant)) != nil else { return [] }
