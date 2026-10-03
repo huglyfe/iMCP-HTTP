@@ -1,10 +1,18 @@
 # Initial implementation plan
 
-Agreed 2026-10-02. This document is the plan, not evidence that a feature exists.
+Agreed 2026-10-02; implementation updated 2026-10-03. Completed code and verified behavior are distinguished below.
+
+## Progress
+
+- Implemented: SwiftMCP + Hummingbird, loopback MCP, native OAuth consent, durable grants, refresh rotation, revocation, pause/start, service enablement, and Reminders list/fetch/get/create/edit/complete/reopen/delete.
+- Verified with Codex CLI 0.160.0: metadata discovery, PKCE login through a fixture invoking the native decision API, harmless tool call, server restart with persisted approval, and revoked tool rejection. No model turn or production client configuration was used.
+- Automated fixture tests cover OAuth failures/persistence, HTTP limits/Host/Origin, concurrent request IDs, service/permission gates, exact target dispatch, dates, clearing fields, and failed writes.
+- Remaining release gates: native Approve/Deny clicks and window/menu behavior; real macOS permission flow; disposable Reminders create/edit/complete/reopen/readback/delete; signing/permission persistence; sleep/wake and measured idle memory. Other Apple services remain unimplemented.
+- Owner direction on 2026-10-03: a clean application design; choose libraries for this app, with no compatibility obligation to iMCP's architecture.
 
 ## Product
 
-iMCP-HTTP is a small native SwiftUI app giving approved AI clients access to Apple services. The primary user is the owner; Codex on the same Mac is the first client. Reuse proven libraries and selected iMCP integrations while rebuilding application coordination, authorization, and dispatch with clear ownership.
+iMCP-HTTP is a small native SwiftUI app giving approved AI clients access to Apple services. The primary user is the owner; Codex on the same Mac is the first client. Use proven libraries and native Apple frameworks with clear application, authorization, and dispatch ownership. iMCP is a product reference, not an architectural dependency.
 
 The latest repository instruction is private creation. Keep the code suitable for open-source release from the start; publish only on a subsequent explicit instruction.
 
@@ -19,7 +27,7 @@ The latest repository instruction is private creation. Keep the code suitable fo
 - A compact main window plus menu-bar access. Initial controls: server state, services, approved clients, revoke.
 - Later ambition is broad Mac integration. Remote networking, computer control, native Reminders tags/subtasks, a plugin marketplace, and multi-user hosting are not first-release requirements.
 
-## Bootstrap (this repository)
+## Bootstrap (completed before implementation)
 
 - Swift 6 package with native SwiftUI app and a Foundation-independent service inventory.
 - App bundling script, canonical check command, and macOS CI workflow.
@@ -28,7 +36,7 @@ The latest repository instruction is private creation. Keep the code suitable fo
 
 ## 1. OAuth and transport feasibility
 
-Before choosing a large server framework, prove the smallest real Codex flow with the official Swift MCP SDK and an appropriate embedded HTTP implementation. Inspect released SDK source; client OAuth support does not imply an embedded authorization server is provided.
+The feasibility comparison selected SwiftMCP 1.13.0 core and Hummingbird 2.27.0. The released official Swift SDK rejects Codex object-valued experimental capabilities. SwiftMCP passed without a dependency fork. See architecture for the transport and native-consent boundaries.
 
 Resolve: protocol/release version; HTTP server integration; local issuer scheme accepted by Codex and the chosen libraries; stable endpoint/port; client registration; callback matching; native consent handoff; token storage. Record the selected versions and decisions in architecture.
 

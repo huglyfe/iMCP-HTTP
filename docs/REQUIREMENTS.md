@@ -1,6 +1,6 @@
 # Behavior requirements
 
-All server requirements below are planned. Current behavior is described in `ARCHITECTURE.md`.
+These are product contracts. Current implementation and verification limits are described in `ARCHITECTURE.md` and `PLAN.md`.
 
 ## OAuth and owner approval
 
@@ -58,3 +58,22 @@ Manual acceptance uses Codex and disposable Apple data: prove successful behavio
 - [Codex MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
 
 Consult current specifications during implementation; record the tested protocol and client versions with acceptance evidence.
+
+## Implemented Reminders contract
+
+Calls require an active grant, global Reminders enablement, and current full EventKit authorization. All accounts/lists available to the current macOS user share that permission. Services are checked on dispatch and again inside the adapter. Disabled tools cannot be invoked directly by name.
+
+- `reminders_lists`: no arguments; returns `lists` with `id`, `title`, `account`, `accountID`, `writable`.
+- `reminders_fetch`: required `listID`; optional `completed` boolean (omitted means both), `offset` 0–100000 (default 0), `limit` 1–200 (default 100). Returns `reminders`, `total`, optional `nextOffset`. Sorted by opaque item ID. A changing list can shift pages; restart pagination after mutations. EventKit fetches the selected list internally; the app retains no database/cache.
+- `reminders_get`: required exact `id`. Includes completed items.
+- `reminders_create`: required `listID` and `changes` object with a nonempty `title`.
+- `reminders_edit`: required exact `id` and nonempty `changes`. Only `title`, `notes`, `due`, `priority`, and `completed` are supported. Omission preserves the field. Null clears notes/due only. Title is at most 1024 UTF-8 bytes; notes at most 16384. Priority is an integer 0–9 (0 none, 1 highest). Completed true/false completes/reopens.
+- `reminders_delete`: required exact `id`; success is `{deleted: true, id: ...}` only after EventKit confirms removal. A missing/stale ID fails, including after a previous successful delete.
+
+Due input accepts strictly valid `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SSZ` / `YYYY-MM-DDTHH:MM:SS±HH:MM` strings. Fractions, offset-free times, and unknown offsets (`-00:00`) are rejected. Date-only values have no time or timezone; timed values normalize to UTC. Due output uses Foundation `DateComponents` (native components/calendar and optional timezone), preserving floating/date-only meaning from existing items. A nil notes/due field is omitted in record output; input null explicitly clears it.
+
+Unknown fields and incorrect types fail before mutation. No default list fallback, list moves, recurrence edits, alarms, tags, sections, subtasks, or bulk writes. Existing unrelated EventKit fields are left alone. The adapter refreshes the exact object before patching, but EventKit does not provide an atomic compare-and-swap against concurrent edits from other apps.
+
+Writes are serialized on the main actor without automatic retries. EventKit errors return `write_failed` and instruct readback before retrying because no success was confirmed. Unsaved cached object changes are reset after a failure. HTTP disconnect or process termination during a write can leave an unknown outcome. Read and inspect the target/list before any retry.
+
+Tool failures carry a readable message, MCP `isError`, and `_meta.errorCode` where the tool handler ran. Codes include `invalid_arguments`, `unknown_tool`, `service_unavailable`, `service_disabled`, `permission_denied`, `not_found`, `read_only`, `write_failed`, `read_failed`, `busy`, and `timeout`. SDK-level validation may report its own MCP error before dispatch. Reads are limited to four concurrent EventKit fetches with a 15-second cancellable timeout.
