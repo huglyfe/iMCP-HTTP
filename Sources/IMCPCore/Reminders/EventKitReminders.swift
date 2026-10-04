@@ -89,7 +89,9 @@ public final class EventKitReminders: AppleAccess, ReminderAccess {
       try await withCheckedThrowingContinuation { continuation in
         fetch.continuation = continuation
         fetch.request = store.fetchReminders(matching: predicate) { reminders in
-          let records = reminders?.compactMap(Self.record)
+          let records = reminders?.compactMap {
+            Self.record($0, summary: true, includeNotes: query.search != nil)
+          }
           Task { @MainActor in fetch.finish(records) }
         }
         fetch.timeout = Task { @MainActor in
@@ -180,8 +182,17 @@ public final class EventKitReminders: AppleAccess, ReminderAccess {
     if let priority = changes.priority { reminder.priority = priority }
     if let completed = changes.completed { reminder.isCompleted = completed }
   }
-  nonisolated private static func record(_ reminder: EKReminder) -> ReminderRecord? {
+  nonisolated static func record(
+    _ reminder: EKReminder, summary: Bool = false, includeNotes: Bool = true
+  ) -> ReminderRecord? {
     guard let calendar = reminder.calendar else { return nil }
+    if summary {
+      return ReminderRecord(
+        id: reminder.calendarItemIdentifier,
+        listID: calendar.calendarIdentifier, title: reminder.title ?? "",
+        notes: includeNotes ? reminder.notes : nil, priority: reminder.priority,
+        completed: reminder.isCompleted, due: AppleDate(components: reminder.dueDateComponents))
+    }
     let alarms = (reminder.alarms ?? []).compactMap(TimeAlarm.init)
     let other = (reminder.alarms?.count ?? 0) - alarms.count
     return ReminderRecord(

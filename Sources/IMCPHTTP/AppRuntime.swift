@@ -26,19 +26,23 @@ final class AppRuntime: ObservableObject {
   let configuration: ServerConfiguration
   private let storeURL: URL
   private var authorization: AuthorizationStore?
-  static let services: [AppleService] = [.reminders, .calendar, .contacts, .maps]
+  static let services: [AppleService] = [.reminders, .calendar, .contacts, .maps, .photos]
   private let eventStore = EventKitStore()
   private lazy var reminders = EventKitReminders(eventStore: eventStore)
   private lazy var calendar = EventKitCalendar(eventStore: eventStore)
   private lazy var contacts = NativeContacts()
+  private lazy var photos = NativePhotos()
   private lazy var maps = NativeMaps()
   @Published private(set) var settings = ServiceSettings()
   @Published private(set) var serviceStatus: [AppleService: String] = [:]
   @Published private(set) var changingService: AppleService?
+  @Published private(set) var changingTool: String?
+  @Published private(set) var tools: [ServiceTool] = []
   private lazy var dispatcher = ToolDispatcher(
-    reminders: reminders, calendar: calendar, contacts: contacts, maps: maps)
+    reminders: reminders, calendar: calendar, contacts: contacts, maps: maps, photos: photos)
   private func access(_ service: AppleService) -> any AppleAccess {
     switch service {
+    case .photos: photos
     case .reminders: reminders
     case .calendar: calendar
     case .contacts: contacts
@@ -101,6 +105,8 @@ final class AppRuntime: ObservableObject {
     guard let authorization else { return }
     serverTask = Task { [weak self, configuration, dispatcher] in
       guard let self else { return }
+      await dispatcher.setDisabledTools(self.settings.disabledTools)
+      self.tools = await dispatcher.catalog()
       await authorization.setAccepting(true)
       do {
         try await LocalServer(
@@ -123,17 +129,17 @@ final class AppRuntime: ObservableObject {
     }
     observationTask?.cancel()
     observationTask = Task { [weak self] in
-      while !Task.isCancelled {
-        let pending = await authorization.approvals()
-        let clients = await authorization.clients()
-        self?.approvals = pending
-        self?.clients = clients
-        if let self {
-          for service in Self.services { self.serviceStatus[service] = self.access(service).status }
-        }
-        do { try await Task.sleep(for: .seconds(1)) } catch { return }
+      for await snapshot in await authorization.updates() {
+        guard !Task.isCancelled else { return }
+        self?.approvals = snapshot.approvals
+        self?.clients = snapshot.clients
       }
     }
+  }
+
+  func refreshServiceStatus() {
+    guard settingsLoaded else { return }
+    for service in Self.services { serviceStatus[service] = access(service).status }
   }
 
   private func didStart() { state = .running }
@@ -150,7 +156,6 @@ final class AppRuntime: ObservableObject {
   func decide(_ request: PendingApproval, approve: Bool) async {
     do {
       try await authorization?.decide(id: request.id, approve: approve)
-      approvals = await authorization?.approvals() ?? []
     } catch {
       errorMessage =
         "The request expired or could not be approved. Start login again in your client."
@@ -160,7 +165,6 @@ final class AppRuntime: ObservableObject {
   func revoke(_ grant: ClientGrant) async {
     do {
       try await authorization?.revoke(grant.id)
-      clients = await authorization?.clients() ?? []
     } catch { errorMessage = "Revocation could not be saved. Pause access and try again." }
   }
 
@@ -169,7 +173,7 @@ final class AppRuntime: ObservableObject {
   }
 
   func setEnabled(_ service: AppleService, _ enabled: Bool) async {
-    guard settingsLoaded, changingService == nil else { return }
+    guard settingsLoaded, changingService == nil, changingTool == nil else { return }
     changingService = service
     defer { changingService = nil }
     do {
@@ -188,6 +192,28 @@ final class AppRuntime: ObservableObject {
       errorMessage =
         "The service setting could not be saved or permission could not be requested. Pause the server if you need to stop access."
     }
+  }
+
+  func setToolEnabled(_ name: String, _ enabled: Bool) async {
+    guard settingsLoaded, changingService == nil, changingTool == nil,
+      tools.contains(where: { $0.name == name })
+    else { return }
+    changingTool = name
+    defer { changingTool = nil }
+    do {
+      var updated = settings
+      if enabled { updated.disabledTools.remove(name) } else { updated.disabledTools.insert(name) }
+      try updated.save(to: settingsURL)
+      await dispatcher.setDisabledTools(updated.disabledTools)
+      settings = updated
+    } catch {
+      errorMessage = "The tool setting could not be saved."
+    }
+  }
+
+  func quit() async {
+    await stop()
+    NSApp.terminate(nil)
   }
 
   func copyConnectionCommand() {

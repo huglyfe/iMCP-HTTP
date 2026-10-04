@@ -7,9 +7,11 @@ Agreed 2026-10-02; implementation updated 2026-10-03. Completed code and verifie
 - Implemented in the private draft: SwiftMCP + Hummingbird, loopback MCP, native OAuth consent, durable grants, refresh rotation, revoke, pause/start, and working service controls.
 - Version 0.4.0 expands to 36 typed tools: connection check; Reminders account/list/item management, search/date ranges, start/URL/location/time alarms/recurrence; Calendar account/calendar/occurrence management; Contacts card/group management; Maps search/routes.
 - Clean tool contracts: explicit write targets, compact fetch summaries, detail on get, saved records on writes, no prose success envelope. iMCP, apple-reminders-mcp, and remindctl source review is recorded in INSPIRATION.
-- Automated checks cover service gates, strict input/patch/date/recurrence validation, native value mapping, backward-compatible disabled defaults, OAuth/HTTP, and SDK schemas. The opt-in Codex fixture exercises all four services with fake data, restart, and revocation.
-- Remaining release gates: native Approve/Deny clicks, window/menu behavior, macOS permission flows, disposable records and cleanup, live Maps results, signing/permission persistence, sleep/wake, and measured idle memory. Computer-use app inspection currently fails with a native-pipe error; fixture tests do not replace this acceptance.
-- Remaining service slices: Location and Shortcuts next; Weather depends on developer signing/capabilities. Messages/Phone private-store access and Capture require separate product/permission decisions. No production integration cutover or public release.
+- Automated checks cover service gates, strict input/patch/date/recurrence validation, native value mapping, backward-compatible disabled defaults, OAuth/HTTP, and SDK schemas. The opt-in Codex fixture exercises all five services with fake data, restart, and revocation.
+- Remaining release gates: native Approve/Deny clicks, menu/Settings behavior, macOS permission flows, disposable records and cleanup, live Maps results, signing/permission persistence, sleep/wake, and measured idle memory. Computer-use app inspection currently fails with a native-pipe error; fixture tests do not replace this acceptance.
+- Added three read-only Photos metadata tools through PhotoKit; 39 tools across five services. Photos stays disabled on upgrade. Replaced UI polling with authorization snapshots and an approval-expiry timer. Lean Reminders fetch snapshots omit detail arrays and unused notes; full native fetch before pagination remains an EventKit constraint.
+- Owner chose direct frameworks and deferred automation. Mail/Notes/Music AppleScript adapters are not being added. WeatherKit/MusicKit require signing/capability proof; Messages/Phone private-store access and HomeKit’s Catalyst requirement need separate decisions. Location and Capture remain direct-framework candidates. No production integration cutover or public release.
+- Corrected UI direction: iMCP-style menu-bar-only app (no Dock icon or main window), compact service controls, Settings with global individual-tool switches and client management. The earlier window scaffold diverged from the intended outer shape; the HTTP/OAuth core remains independent.
 - Owner direction: independent clean application design, broad Apple coverage, simple parameters and minimal JSON results; no iMCP compatibility obligation.
 
 ## Product
@@ -25,8 +27,8 @@ The latest repository instruction is private creation. Keep the code suitable fo
 - Separate credentials for each client grant. Account-wide capabilities shared across approved clients; no per-list or per-client tool policy editor.
 - Global service enablement remains explicit and subject to macOS permissions.
 - Reminders editing and deletion are the first tool additions. Existing fetch/create behavior must become reliable enough to target those operations.
-- Intended initial inventory: Reminders, Calendar, Contacts, Location, Maps, Messages, Phone, Shortcuts, Weather, Capture, Utilities. Each adapter ships only after its requirements and availability are verified.
-- A compact main window plus menu-bar access. Initial controls: server state, services, approved clients, revoke.
+- Intended initial inventory: Reminders, Calendar, Contacts, Photos, Location, Maps, Mail, Notes, Music, Messages, Phone, Home, Podcasts, News, Shortcuts, Weather, Capture, Utilities. Each adapter ships only after its requirements and availability are verified.
+- Menu-bar-only accessory app with a compact panel for server state, services, and pending approval. Settings holds individual tools, approved clients/revoke, and setup. Keep iMCP’s interaction concept while simplifying the core.
 - Later ambition is broad Mac integration. Remote networking, computer control, native Reminders tags/subtasks, a plugin marketplace, and multi-user hosting are not first-release requirements.
 
 ## Bootstrap (completed before implementation)
@@ -60,7 +62,7 @@ Persist owner grants until revoked. Access credentials may expire and refresh wi
 
 Implement service toggles reflecting real macOS authorization, client details, and revoke. Names are display labels. New sensitive services are disabled until the owner enables them; existing approved clients then share the enabled account-wide capabilities.
 
-Acceptance: connect -> approve -> use -> restart -> reconnect -> revoke -> reject subsequent tool calls and refresh. Pause stops tool access. Closing the window leaves the app available; Quit stops it.
+Acceptance: connect -> approve -> use -> restart -> reconnect -> revoke -> reject subsequent tool calls and refresh. Pause stops tool access. Dismissing the panel or Settings leaves the app available; Quit stops it.
 
 ## 4. Bring across the iMCP suite
 
@@ -84,7 +86,7 @@ Codex on this Mac logs in once, lists enabled tools, edits and deletes a disposa
 
 Still pending; fixture tests do not establish Apple-service acceptance. Use an isolated app state directory/port and an isolated client entry, then remove that entry and revoke its grant when finished. Never run an automated test against the owner's reminder data.
 
-1. Verify native Approve and Deny for separate login attempts, pause/start, close/reopen, and Quit. Enable Reminders through the native macOS permission flow.
+1. Verify global tool switches hide disabled tools and reject stale calls, persist across restart, and preserve service-level gating. Verify native Approve and Deny for separate login attempts, pause/start, panel dismiss/reopen, Settings, and Quit. Confirm startup listens without opening the panel and the app has no Dock icon. Enable Reminders through the native macOS permission flow.
 2. Create two visibly named disposable lists in Reminders, for example `iMCP acceptance source <timestamp>` and `iMCP acceptance destination <timestamp>`. Discover their exact IDs; do not use an owner's existing list as an implicit target.
 3. Create identifiable disposable reminders with a date-only deadline, a named-zone timed deadline, and no due date. Verify each in Reminders and through `reminders_get`.
 4. Search the selected lists by a unique test-title prefix; verify today/overdue/upcoming/undated, completion filtering, due sort, and pagination against those items. Include a DST boundary fixture when practical.
@@ -96,3 +98,4 @@ Still pending; fixture tests do not establish Apple-service acceptance. Use an i
 9. Enable Contacts independently. Create disposable person and organization cards in an explicit account; verify names/phones/emails/URLs/addresses/unknown-year birthday, omitted-field preservation, and clearing. Create/rename a disposable group, add/remove the test card, verify membership and same-account failure, then remove the group/cards and verify absence. Do not test deletion on a unified personal card.
 10. Enable Maps without Location access. Search a public address near explicit coordinates; check a known driving/walking route and optional instructions. Disable it and verify stale tool calls fail. No personal device location is needed.
 11. Restart and confirm each saved service preference. Confirm newly added services remain disabled when loading an old Reminders-only settings fixture. Record exact outcomes, without account names, content, credentials, or screenshots of unrelated data.
+12. Enable Photos manually and verify albums, date/media/favorite filtering, metadata paging/get, hidden-asset exclusion, disabled-tool rejection, and restart preferences using identifiable disposable Photos assets. No native photo acceptance or permission request is performed by automated tests.

@@ -9,6 +9,9 @@ public actor AuthorizationStore {
   private var codes: [String: AuthorizationCode] = [:]
   private var recentRequests: [Date] = []
   private var accepting = true
+  private var observer: AsyncStream<AuthorizationViewState>.Continuation?
+  private var observerID: UUID?
+  private var expiryTask: Task<Void, Never>?
 
   public init(
     configuration: ServerConfiguration, storeURL: URL,
@@ -20,16 +23,59 @@ public actor AuthorizationStore {
     grants = try persistence.load()
   }
 
-  public func clients() -> [ClientGrant] { grants.filter { !$0.revoked } }
-
-  public func approvals() -> [PendingApproval] {
+  /// One native UI observer. No timer runs unless a visible approval has an expiry.
+  public func updates() -> AsyncStream<AuthorizationViewState> {
+    observer?.finish()
+    let id = UUID()
+    let (stream, continuation) = AsyncStream<AuthorizationViewState>.makeStream(
+      bufferingPolicy: .bufferingNewest(1))
+    observer = continuation
+    observerID = id
+    continuation.onTermination = { [weak self] _ in
+      Task { await self?.stopObserving(id) }
+    }
     prune()
-    return pending.compactMap { id, value in
+    publish()
+    return stream
+  }
+
+  private func stopObserving(_ id: UUID) {
+    guard observerID == id else { return }
+    observer = nil
+    observerID = nil
+    expiryTask?.cancel()
+    expiryTask = nil
+  }
+
+  private func visibleApprovals() -> [PendingApproval] {
+    pending.compactMap { id, value in
       guard value.callbackURL == nil else { return nil }
       return PendingApproval(
         id: id, clientID: value.request.clientID,
         callback: value.request.callback, expiresAt: value.expiresAt)
     }.sorted { $0.expiresAt < $1.expiresAt }
+  }
+
+  private func publish() {
+    guard let observer else { return }
+    let approvals = visibleApprovals()
+    observer.yield(AuthorizationViewState(approvals: approvals, clients: clients()))
+    expiryTask?.cancel()
+    expiryTask = nil
+    if let expiry = approvals.first?.expiresAt {
+      let delay = max(0, expiry.timeIntervalSince(now()))
+      expiryTask = Task { [weak self] in
+        do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+        await self?.prune()
+      }
+    }
+  }
+
+  public func clients() -> [ClientGrant] { grants.filter { !$0.revoked } }
+
+  public func approvals() -> [PendingApproval] {
+    prune()
+    return visibleApprovals()
   }
 
   func begin(_ fields: [String: String]) throws -> String {
@@ -60,6 +106,7 @@ public actor AuthorizationStore {
         callback: callback, state: state, challenge: challenge, resource: configuration.resource),
       expiresAt: now().addingTimeInterval(180))
     recentRequests.append(now())
+    publish()
     return id
   }
 
@@ -89,6 +136,7 @@ public actor AuthorizationStore {
     callback.queryItems = query
     item.callbackURL = callback.url
     pending[id] = item
+    publish()
   }
 
   func callback(for id: String) throws -> URL? {
@@ -96,6 +144,7 @@ public actor AuthorizationStore {
     guard let item = pending[id] else { throw OAuthFailure("expired_request") }
     if let callback = item.callbackURL {
       pending.removeValue(forKey: id)
+      publish()
       return callback
     }
     return nil
@@ -194,6 +243,7 @@ public actor AuthorizationStore {
       pending.removeAll()
       codes.removeAll()
     }
+    publish()
   }
 
   private func makeTokens() throws -> TokenResponse {
@@ -202,11 +252,14 @@ public actor AuthorizationStore {
   private func persist(_ next: [ClientGrant]) throws {
     try persistence.save(next)
     grants = next
+    publish()
   }
   private func prune() {
     let date = now()
+    let count = pending.count
     pending = pending.filter { $0.value.expiresAt > date }
     codes = codes.filter { $0.value.expiresAt > date }
     recentRequests = recentRequests.filter { date.timeIntervalSince($0) < 60 }
+    if pending.count != count { publish() }
   }
 }

@@ -130,6 +130,7 @@ try:
     for request_id, tool, tool_args, expected in [
         (10, "calendar_edit", {"id": "fixture-event", "start": "2026-10-03T12:00:00Z", "span": "thisEvent", "changes": {"title": "Fixture edit"}}, "fixture-event"),
         (11, "contacts_edit", {"id": "fixture-card", "changes": {"familyName": "Fixture edit"}}, "fixture-card"),
+        (13, "photos_get", {"id": "fixture-photo"}, "fixture-photo"),
         (12, "maps_directions", {"from": {"latitude": 0, "longitude": 0}, "to": {"latitude": 1, "longitude": 1}}, "distanceMeters"),
     ]:
         stage = tool + " fixture"
@@ -147,7 +148,7 @@ try:
     denied = receive(lambda m: m.get("id") == 7)
     assert not has_connection(denied), "Revocation did not deny tool"
     assert "error" in denied or denied.get("result", {}).get("isError") is True, "No failure reported"
-    print("Real Codex: OAuth, discovery, Reminders/Calendar/Contacts/Maps fixtures, restart, revocation passed.", flush=True)
+    print("Real Codex: OAuth, discovery, Reminders/Calendar/Contacts/Maps/Photos fixtures, restart, revocation passed.", flush=True)
 except Exception as error:
     # Error messages can include URLs or tokens. Report only the stage and type.
     print("Codex acceptance failed at " + stage + ": " + type(error).__name__, flush=True)

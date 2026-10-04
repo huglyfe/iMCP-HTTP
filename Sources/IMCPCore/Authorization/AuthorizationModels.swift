@@ -24,6 +24,11 @@ public struct ServerConfiguration: Sendable {
   }
 }
 
+public struct AuthorizationViewState: Sendable {
+  public let approvals: [PendingApproval]
+  public let clients: [ClientGrant]
+}
+
 public struct PendingApproval: Identifiable, Sendable {
   public let id: String
   public let clientID: String

@@ -83,5 +83,6 @@ final class MapTools: Sendable {
 }
 
 extension MapTools: AppleToolModule {
+  var service: AppleService { .maps }
   var available: Bool { get async { await access.available } }
 }

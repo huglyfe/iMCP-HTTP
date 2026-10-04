@@ -4,6 +4,9 @@ Build a small native Mac app one owner can understand and maintain. Read `docs/P
 
 ## Boundaries
 
+- Preserve iMCP’s menu-bar-only outer shape: no Dock icon or main window; compact panel and on-demand Settings. Keep the HTTP core independent.
+- Services contain global individual-tool switches. All approved clients share those choices; account-wide access does not mean omitting tool controls.
+
 - SwiftUI displays runtime state and submits owner decisions. Core code must not depend on SwiftUI bindings.
 - One app process owns the eventual listener and Apple permissions. Do not introduce a daemon, CLI proxy, hosted service, or remote exposure without a concrete requirement.
 - OAuth is the chosen authentication path. Never replace it with trust by client name, an unauthenticated fallback, or a proprietary pairing exchange.

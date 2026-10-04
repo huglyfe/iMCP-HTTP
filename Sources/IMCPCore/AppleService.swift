@@ -1,6 +1,13 @@
 /// The intended service inventory. Inclusion does not mean an adapter is implemented
 /// or that the owner has granted access.
 public enum AppleService: String, CaseIterable, Identifiable, Sendable {
+  case photos
+  case mail
+  case notes
+  case music
+  case home
+  case podcasts
+  case news
   case reminders
   case calendar
   case contacts
@@ -17,6 +24,13 @@ public enum AppleService: String, CaseIterable, Identifiable, Sendable {
 
   public var title: String {
     switch self {
+    case .photos: "Photos"
+    case .mail: "Mail"
+    case .notes: "Notes"
+    case .music: "Music"
+    case .home: "Home"
+    case .podcasts: "Podcasts"
+    case .news: "News"
     case .reminders: "Reminders"
     case .calendar: "Calendar"
     case .contacts: "Contacts"

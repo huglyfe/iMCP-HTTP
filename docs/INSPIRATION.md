@@ -58,3 +58,31 @@ Apple SDK headers were the API authority for EventKit dates, recurrence restrict
 - Omit absent values and empty optional detail arrays. Put names/capabilities in discovery, not repeated on every record.
 - Short action descriptions. Include only distinctions needed to avoid a wrong operation (such as recurrence scope or whole-list deletion).
 - Strict validation and native failure reporting; no compatibility aliases, notes-based feature emulation, or mirror database.
+
+## Menu-bar UI correction, 2026-10-03
+
+Reviewed iMCP at the same pinned `a7698def` revision: `App/App.swift`, `App/Views/ContentView.swift`, `ServiceToggleView.swift`, and `ServicesSettingsView.swift`, plus its MIT license (copyright 2025 Mattt). Reuse the interaction concept: menu-bar accessory, compact service rows, and Settings with individual tool controls. This implementation uses original SwiftUI code; no upstream source/assets, updater, window-resizing workaround, SwiftUI bindings in core, or stdio/Bonjour machinery are imported. HTTP setup and OAuth approval replace upstream connection setup and trust-by-name.
+
+## Additional Apple apps and performance review, 2026-10-03
+
+Owner preference: direct frameworks; defer app automation. No app data, Automation permissions, or private databases were inspected. Only installed scripting dictionaries, SDK headers, source snapshots, and official documentation were read. No code was copied.
+
+- [macos-apps-mcp](https://github.com/derekrussell/macos-apps-mcp/tree/739c0cb85340a749e8e946341b76c40fddad1e7d), MIT, copyright 2026 Derek Russell: reviewed tools/_osascript.py, tools/mail.py, tools/notes.py and scripts/mail.applescript / notes.applescript. Bounded subprocess automation, exact IDs/account-qualified targets, and HTML note content are useful references, but this is not a direct-framework implementation. No subprocess wrapper is adopted.
+- [griches/apple-mcp](https://github.com/griches/apple-mcp/tree/461524625402548f7729db9f7a3758264b7644be): reviewed mail/notes/messages AppleScript modules and installed Mail/Notes/Messages/Music scripting dictionaries. Automation can read Mail/Notes and send Messages, but Messages scripting does not provide full history. No source reuse; the checked snapshot has no root license file, so do not copy code without resolving its license.
+- iMCP’s pinned Weather, Messages, and Phone adapters: WeatherKit needs developer capabilities; message/call history queries private SQLite stores and folder bookmarks/WAL handling. Keep those integrations deferred rather than silently introducing database copies or broad disk access.
+- [osxphotos](https://github.com/RhetTbull/osxphotos): documentation describes SQLite-copy/in-memory indexing for richer library metadata. Avoid that architecture here; use [PhotoKit](https://developer.apple.com/documentation/photokit) for a bounded metadata-only slice. PHFetchOptions/PHPhotoLibrary/PHAsset SDK headers are the API authority.
+
+| App | Supported path / decision |
+| --- | --- |
+| Photos | Implemented: PhotoKit album/asset metadata. No bytes/export/hidden assets or database mirror. |
+| Mail | MailKit is a Mail extension framework, not general inbox querying. AppleScript path deferred; no IMAP credentials/provider backend introduced. |
+| Notes | No suitable public direct Notes data framework found. Scripting/Shortcuts or private database work would change the agreed access model; deferred. |
+| Weather | [WeatherKit](https://developer.apple.com/weatherkit/) supports macOS, requires Developer Program access/capability signing and attribution. Current bundle is ad-hoc signed; deferred until entitlement-backed acceptance. |
+| Music | [MusicKit](https://developer.apple.com/documentation/musickit) supports macOS; app service/developer token generation, user authorization, and subscription capabilities require proof. Music.app automation is deferred. |
+| Messages | History needs private chat.db in reviewed iMCP source; AppleScript sending is automation. Neither path is implemented. |
+| Phone | iMCP history reads private CallHistoryDB; [CallKit](https://developer.apple.com/documentation/callkit) integrates an app’s calls and does not supply the owner’s Phone history. Deferred. |
+| Home | [HomeKit platform metadata](https://developer.apple.com/tutorials/data/documentation/homekit.json) lists Mac Catalyst, not native macOS. No helper app/Catalyst rewrite introduced. |
+| Podcasts | [Apple iTunes Search API](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/Searching.html) supports public podcast search, not a verified personal subscriptions/progress API. No substitute catalog tool advertised as library integration. |
+| News | [Apple News API](https://developer.apple.com/documentation/applenewsapi) publishes/manages publisher articles; no suitable supported personal-reader integration found. Deferred. |
+
+Performance: use authorization-state snapshots instead of idle polling. Reminders summary snapshots omit alarm/recurrence arrays and unused fields. EventKit still returns the native matching collection; native date predicate narrowing is deferred because query-zone/date-only/floating semantics must not regress merely to reduce RAM.

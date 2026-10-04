@@ -5,18 +5,24 @@ public struct ServiceSettings: Codable, Sendable {
   public var remindersEnabled: Bool
   public var calendarEnabled: Bool
   public var contactsEnabled: Bool
+  public var photosEnabled: Bool
+  public var disabledTools: Set<String>
   public var mapsEnabled: Bool
   public init(
     remindersEnabled: Bool = false, calendarEnabled: Bool = false, contactsEnabled: Bool = false,
-    mapsEnabled: Bool = false
+    mapsEnabled: Bool = false, photosEnabled: Bool = false, disabledTools: Set<String> = []
   ) {
     self.remindersEnabled = remindersEnabled
     self.calendarEnabled = calendarEnabled
     self.contactsEnabled = contactsEnabled
     self.mapsEnabled = mapsEnabled
+    self.photosEnabled = photosEnabled
+    self.disabledTools = disabledTools
   }
   public init(from decoder: Decoder) throws {
     let values = try decoder.container(keyedBy: CodingKeys.self)
+    photosEnabled = try values.decodeIfPresent(Bool.self, forKey: .photosEnabled) ?? false
+    disabledTools = try values.decodeIfPresent(Set<String>.self, forKey: .disabledTools) ?? []
     remindersEnabled = try values.decodeIfPresent(Bool.self, forKey: .remindersEnabled) ?? false
     calendarEnabled = try values.decodeIfPresent(Bool.self, forKey: .calendarEnabled) ?? false
     contactsEnabled = try values.decodeIfPresent(Bool.self, forKey: .contactsEnabled) ?? false
@@ -25,6 +31,7 @@ public struct ServiceSettings: Codable, Sendable {
   public subscript(service: AppleService) -> Bool {
     get {
       switch service {
+      case .photos: photosEnabled
       case .reminders: remindersEnabled
       case .calendar: calendarEnabled
       case .contacts: contactsEnabled
@@ -34,6 +41,7 @@ public struct ServiceSettings: Codable, Sendable {
     }
     set {
       switch service {
+      case .photos: photosEnabled = newValue
       case .reminders: remindersEnabled = newValue
       case .calendar: calendarEnabled = newValue
       case .contacts: contactsEnabled = newValue

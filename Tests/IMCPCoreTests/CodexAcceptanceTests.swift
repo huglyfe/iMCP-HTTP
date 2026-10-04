@@ -23,6 +23,7 @@ struct CodexAcceptanceTests {
             dispatcher: ToolDispatcher(modules: [
               ReminderTools(access: FakeReminders()), CalendarTools(access: FakeCalendar()),
               ContactTools(access: FakeContacts()), MapTools(access: FakeMaps()),
+              PhotoTools(access: FakePhotos()),
             ])
           ).run {
             continuation.yield(())

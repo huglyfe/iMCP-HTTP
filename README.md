@@ -1,8 +1,8 @@
 # iMCP-HTTP
 
-A native Mac app that gives approved AI clients access to Apple services over MCP Streamable HTTP. One process, a main window, and a menu-bar control.
+A native Mac app that gives approved AI clients access to Apple services over MCP Streamable HTTP. One process, an iMCP-style menu-bar panel, and Settings. No Dock icon or main window.
 
-**Development implementation:** loopback HTTP, native OAuth approval, durable client grants, pause/revoke, and native Reminders, Calendar, Contacts, and Maps tools. Real Codex login, fixture tool calls, restart, and revocation are tested. Native UI, macOS permission prompts, and real disposable Apple-service writes still need manual acceptance. This repository remains private.
+**Development implementation:** loopback HTTP, native OAuth approval, durable client grants, pause/revoke, and native Reminders, Calendar, Contacts, Maps, and read-only Photos metadata tools. Real Codex login, fixture tool calls, restart, and revocation are tested. Native UI, macOS permission prompts, and real disposable Apple-service writes still need manual acceptance. This repository remains private.
 
 ## Develop
 
@@ -26,13 +26,13 @@ codex mcp login imcp-http
 
 Approve the pending request in the app. The registered public client ID is `codex`; the stable callback is `http://127.0.0.1/callback` with a client-selected ephemeral port. Current Codex defaults to this callback. Native approval is required for each new grant; the client ID alone proves no identity.
 
-Approval lasts until revoked. Tokens expire after 15 minutes and refresh without a new approval. Pause stops access; closing the window keeps the menu-bar app running. Revoke prevents subsequent calls and refresh. Existing calls may already have completed.
+Approval lasts until revoked. Tokens expire after 15 minutes and refresh without a new approval. The server switch pauses access; closing the menu panel or Settings keeps the app running. Revoke prevents subsequent calls and refresh. Existing calls may already have completed.
 
-Enable each service explicitly in the app and accept its macOS permission prompt when needed. Approved clients share access across this Mac user's available accounts. Maps uses supplied locations and does not request device location. Reconnect clients after changing services to refresh their tool list. There is no per-list policy editor.
+Enable each service in the menu panel and accept its macOS permission prompt when needed. Settings → Services also exposes individual tool switches. Disabled tools disappear from discovery and subsequent calls by name fail; all approved clients share these global choices. Approved clients share access across this Mac user's available accounts. Photos uses PhotoKit without opening Photos.app; its tools read metadata only. Maps uses supplied locations and does not request device location. Reconnect clients after changing services or tools to refresh their tool list. There is no per-list policy editor.
 
 ## Tools
 
-36 typed tools are implemented. Discovery includes only enabled, available services. Reads return compact JSON summaries; get and mutations return detail; deletion returns `{deleted, id}`. Exact identifiers target writes. No prose success envelopes or implicit default accounts.
+39 typed tools are implemented. Discovery includes only enabled, available services. Reads return compact JSON summaries; get and mutations return detail; deletion returns `{deleted, id}`. Exact identifiers target writes. No prose success envelopes or implicit default accounts.
 
 | Service | Operations |
 | --- | --- |
@@ -40,6 +40,7 @@ Enable each service explicitly in the app and accept its macOS permission prompt
 | Reminders | Accounts; list/create/rename/delete lists; fetch/get/create/edit/move/delete reminders; completion, date ranges, URLs, start dates, display alarms, recurrence |
 | Calendar | Accounts; list/create/rename/delete calendars; fetch/get/create/edit/move/delete exact occurrences; all-day events, recurrence, alarms, availability |
 | Contacts | Accounts; search/get/create/edit/delete individual cards; names, organizations, labeled values, addresses, birthdays; groups and membership |
+| Photos | Album discovery; date/media/favorite-filtered asset metadata; exact asset metadata. No image export, iCloud media download, or hidden assets |
 | Maps | Place/address search; driving/walking distance and travel time; optional instructions |
 
 Example arguments:

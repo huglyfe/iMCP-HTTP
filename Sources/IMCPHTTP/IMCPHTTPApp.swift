@@ -2,47 +2,46 @@ import SwiftUI
 
 @main
 struct IMCPHTTPApp: App {
-  @StateObject private var runtime = AppRuntime()
+  @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
   var body: some Scene {
-    Window("iMCP-HTTP", id: "main") {
-      OverviewView(runtime: runtime)
-        .task { runtime.startIfNeeded() }
+    MenuBarExtra {
+      OverviewView(runtime: delegate.runtime)
+    } label: {
+      MenuIcon(runtime: delegate.runtime)
     }
-    .defaultSize(width: 540, height: 640)
-    .windowResizability(.contentMinSize)
+    .menuBarExtraStyle(.window)
 
-    MenuBarExtra("iMCP-HTTP", systemImage: "externaldrive.connected.to.line.below") {
-      MenuContent(runtime: runtime)
+    Settings {
+      SettingsView(runtime: delegate.runtime)
     }
   }
 }
 
-private struct MenuContent: View {
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+  let runtime = AppRuntime()
+
+  func applicationDidBecomeActive(_ notification: Notification) {
+    runtime.refreshServiceStatus()
+  }
+
+  func applicationDidFinishLaunching(_ notification: Notification) {
+    // Server lifetime belongs to the app, independent of whether its panel is open.
+    runtime.startIfNeeded()
+  }
+}
+
+private struct MenuIcon: View {
   @ObservedObject var runtime: AppRuntime
-  @Environment(\.openWindow) private var openWindow
 
   var body: some View {
-    Text(runtime.state.title)
-    if !runtime.approvals.isEmpty {
-      Text("\(runtime.approvals.count) connection awaiting approval")
-    }
-    Button("Open iMCP-HTTP") {
-      openWindow(id: "main")
-      NSApp.activate(ignoringOtherApps: true)
-    }
-    if runtime.state == .running {
-      Button("Pause Access") { Task { await runtime.stop() } }
-    } else if runtime.state == .stopped {
-      Button("Start Server") { runtime.start() }
-    }
-    Divider()
-    Button("Quit iMCP-HTTP") {
-      Task {
-        await runtime.stop()
-        NSApp.terminate(nil)
-      }
-    }
-    .keyboardShortcut("q")
+    Image(
+      systemName: runtime.approvals.isEmpty
+        ? "externaldrive.connected.to.line.below" : "person.crop.circle.badge.exclamationmark"
+    )
+    .accessibilityLabel(
+      runtime.approvals.isEmpty
+        ? "iMCP-HTTP: \(runtime.state.title)" : "iMCP-HTTP: connection awaiting approval")
   }
 }

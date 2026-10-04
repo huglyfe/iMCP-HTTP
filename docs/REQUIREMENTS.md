@@ -16,6 +16,13 @@ These are product contracts. Current implementation and verification limits are 
 - Client labels are untrusted display data. They do not establish application identity or ownership.
 - The app's local controls own authorization management; MCP tools do not issue grants or approve new clients.
 
+## Native interface
+
+- iMCP-style menu-bar-only accessory app: no Dock icon or main application window. A compact panel holds server/service controls; Settings may open on demand.
+- Settings exposes individual tools within each service, client approval/revocation, and connection setup. Tool choices are global across all approved clients and available accounts, not client-specific permissions.
+- Disabled tools are omitted from discovery and rejected on subsequent calls by name, including stale client discovery. Persist choices across restart; turning a service off still blocks every tool in it.
+- Start the server at app launch independently of menu-panel presentation. Dismissing panels/Settings leaves it running; Quit stops it. Keep one process, lazy native stores, and measure idle memory before claiming RAM improvements.
+
 ## HTTP and lifecycle
 
 - Loopback binding only; reject unexpected Host and Origin values to prevent browser-origin abuse. Implement standard MCP Origin behavior, including rejection of an invalid supplied Origin and support for legitimate native clients without one.
@@ -142,3 +149,13 @@ Fields: givenName, middleName, familyName, prefix, suffix, nickname, organizatio
 - `maps_directions(from, to, mode=driving, includeSteps=false)`: distanceMeters/travelSeconds and optional instruction steps. Mode is driving or walking; endpoints are coordinates.
 
 Maps is independently enabled and sends supplied queries/coordinates to Apple. It does not require Location permission. Four concurrent requests maximum; native requests are cancelled on caller cancellation or after 20 seconds. Network failures return errors. Transit, live device location, map images, and reverse geocoding remain outside this slice.
+
+## Photos
+
+Read-only metadata through PhotoKit. Tools do not launch Photos.app, export bytes, trigger iCloud media downloads, or access hidden assets. Native authorization uses PhotoKit’s read/write library access level (there is no read-only read-access level); this does not expose write tools. Newly introduced Photos enablement defaults false on old settings.
+
+- `photos_albums(offset=0, limit=100)`: regular and smart album IDs/titles, excluding the hidden album; optional nextOffset. Nested album folders are not enumerated.
+- `photos_fetch(query)`: optional albumID, from (inclusive creation timestamp), before (exclusive), media (image/video/audio), favorite, offset, limit. Timestamps use ISO 8601 with seconds and UTC offset. Newest creation first; pages are not snapshots. Result is assets and optional nextOffset.
+- `photos_get(id)`: exact visible asset metadata.
+
+Asset metadata: ID, media, optional createdAt, width, height, optional durationSeconds, favorite. No private database, titles/captions/keywords/faces search, image content, full-library caching, or export. Standard page limits apply. Native results are capped at offset + limit + one and only the requested page is converted.
