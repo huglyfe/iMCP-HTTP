@@ -1,4 +1,3 @@
-import AppKit
 import Combine
 import Foundation
 import IMCPCore
@@ -22,6 +21,7 @@ final class AppRuntime: ObservableObject {
   @Published private(set) var state: State = .stopped
   @Published private(set) var approvals: [PendingApproval] = []
   @Published private(set) var clients: [ClientGrant] = []
+  var authenticatingRequestID: String? { approvalAttempt?.requestID }
   @Published var errorMessage: String?
   let configuration: ServerConfiguration
   private let storeURL: URL
@@ -53,6 +53,8 @@ final class AppRuntime: ObservableObject {
   private var hasStarted = false
   private var serverTask: Task<Void, Never>?
   private var observationTask: Task<Void, Never>?
+  private let ownerAuthentication: any OwnerAuthenticating
+  @Published private var approvalAttempt: (id: UUID, requestID: String)?
 
   typealias ServerRunner =
     @Sendable (LocalServer, @escaping @Sendable () async -> Void) async throws -> Void
@@ -74,12 +76,16 @@ final class AppRuntime: ObservableObject {
   init(
     configuration: ServerConfiguration, directory: URL,
     runServer: @escaping ServerRunner = { server, ready in try await server.run(onReady: ready) },
-    saveSettings: @escaping (ServiceSettings, URL) throws -> Void = { try $0.save(to: $1) }
+    saveSettings: @escaping (ServiceSettings, URL) throws -> Void = { try $0.save(to: $1) },
+    ownerAuthentication: any OwnerAuthenticating = MacOwnerAuthentication(),
+    authorization: AuthorizationStore? = nil
   ) {
     self.configuration = configuration
     storeURL = directory.appendingPathComponent("grants.json")
     self.runServer = runServer
     self.saveSettings = saveSettings
+    self.ownerAuthentication = ownerAuthentication
+    self.authorization = authorization
   }
 
   deinit {
@@ -178,14 +184,14 @@ final class AppRuntime: ObservableObject {
       observationTask = Task { [weak self] in
         for await snapshot in await authorization.updates() {
           guard !Task.isCancelled else { return }
-          self?.approvals = snapshot.approvals
-          self?.clients = snapshot.clients
+          self?.receive(snapshot)
         }
       }
     }
   }
 
   private func fail(_ title: String, _ message: String) {
+    cancelApprovalAuthentication()
     state = .failed(title)
     errorMessage = message
   }
@@ -201,6 +207,7 @@ final class AppRuntime: ObservableObject {
   }
 
   func stop() async {
+    cancelApprovalAuthentication()
     guard let task = serverTask else { return }
     state = .stopping
     task.cancel()
@@ -210,12 +217,59 @@ final class AppRuntime: ObservableObject {
   }
 
   func decide(_ request: PendingApproval, approve: Bool) async {
-    do {
-      try await authorization?.decide(id: request.id, approve: approve)
-    } catch {
-      errorMessage =
-        "The request expired or could not be approved. Start login again in your client."
+    guard state == .running, let authorization else { return }
+    if !approve {
+      if authenticatingRequestID == request.id { cancelApprovalAuthentication() }
+      do { try await authorization.decide(id: request.id, approve: false) } catch {
+        errorMessage = "This request expired. Start login again in your client."
+      }
+      return
     }
+    guard approvalAttempt == nil, approvals.contains(where: { $0.id == request.id }) else { return }
+    errorMessage = nil
+    let attempt = UUID()
+    approvalAttempt = (id: attempt, requestID: request.id)
+    defer {
+      if approvalAttempt?.id == attempt {
+        approvalAttempt = nil
+      }
+    }
+    do {
+      try await ownerAuthentication.authenticate()
+      // Authentication can return after cancellation, denial, pause, or expiry.
+      // The actor also rechecks the exact request and expiry before issuing a code.
+      guard approvalAttempt?.id == attempt, state == .running, !Task.isCancelled else { return }
+      try await authorization.decide(id: request.id, approve: true)
+    } catch {
+      guard approvalAttempt?.id == attempt else { return }
+      switch error {
+      case OwnerAuthenticationError.cancelled:
+        // Leave the request pending so the owner can retry or deny it.
+        break
+      case OwnerAuthenticationError.unavailable:
+        errorMessage = "macOS authentication is unavailable. Unlock your Mac and try again."
+      case OwnerAuthenticationError.failed:
+        errorMessage =
+          "macOS could not verify you. No access was granted. Try again or deny the request."
+      default:
+        errorMessage =
+          "The request expired or could not be approved. Start login again in your client."
+      }
+    }
+  }
+
+  private func receive(_ snapshot: AuthorizationViewState) {
+    approvals = snapshot.approvals
+    clients = snapshot.clients
+    if let id = authenticatingRequestID, !approvals.contains(where: { $0.id == id }) {
+      cancelApprovalAuthentication()
+    }
+  }
+
+  private func cancelApprovalAuthentication() {
+    guard approvalAttempt != nil else { return }
+    approvalAttempt = nil
+    ownerAuthentication.cancel()
   }
 
   func revoke(_ grant: ClientGrant) async {
@@ -274,10 +328,4 @@ final class AppRuntime: ObservableObject {
       errorMessage = "The tool setting could not be saved."
     }
   }
-
-  func quit() async {
-    await stop()
-    NSApp.terminate(nil)
-  }
-
 }

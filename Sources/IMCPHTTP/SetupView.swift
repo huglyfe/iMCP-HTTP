@@ -51,12 +51,6 @@ struct SetupView: View {
                 .padding(12).frame(maxWidth: .infinity, alignment: .leading)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
               }
-              if client.support != .unavailable {
-                Text(
-                  "Enable the services you want to share in Services. Each new connection needs your approval; revoke it later in Connections."
-                )
-                .font(.caption).foregroundStyle(.secondary)
-              }
               Link("Client documentation ↗", destination: client.documentation)
             }
             .padding(.leading, 16).padding(.vertical, 8)

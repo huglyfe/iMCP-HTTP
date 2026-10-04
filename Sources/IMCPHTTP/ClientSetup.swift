@@ -42,10 +42,10 @@ struct ClientSetup: Identifiable {
       .init(
         id: "codex", name: "Codex", keywords: "OpenAI terminal CLI desktop", support: .verified,
         instructions:
-          "Run these commands on this Mac, then approve the connection from the iMCP-HTTP menu-bar icon.",
+          "Run this command on this Mac. Codex starts login automatically. Approve the request in iMCP-HTTP, then authenticate with macOS.",
         documentation: URL(string: "https://learn.chatgpt.com/docs/extend/mcp?surface=cli")!,
         configuration:
-          "codex mcp add imcp-http --url \(resource)\ncodex mcp login imcp-http"
+          "codex mcp add imcp-http --url \(resource)"
       ),
       .init(
         id: "cursor", name: "Cursor", keywords: "editor desktop", support: .unverified,

@@ -50,7 +50,7 @@ struct AuthorizationRequest: Sendable {
 
 struct PendingRequest: Sendable {
   let request: AuthorizationRequest
-  let expiresAt: Date
+  var expiresAt: Date
   var callbackURL: URL?
 }
 

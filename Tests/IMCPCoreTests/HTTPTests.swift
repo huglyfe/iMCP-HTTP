@@ -95,10 +95,35 @@ struct HTTPTests {
     fields["client_id"] = clientID
     url.queryItems = fields.map { URLQueryItem(name: $0.key, value: $0.value) }
     let authorization = try await request("/authorize?\(url.percentEncodedQuery!)")
-    check(authorization.0 == 200)
+    check(authorization.0 == 303)
+    let waitingPath = try require(authorization.2.value(forHTTPHeaderField: "Location"))
     let pending = try require(await f.store.approvals().first)
+    check(waitingPath == "/approval?id=\(pending.id)")
+    for _ in 0..<3 {
+      let page = try await request(waitingPath)
+      check(page.0 == 200)
+      let html = String(decoding: page.1, as: UTF8.self)
+      check(!html.contains("http-equiv=\"refresh\""))
+      check(!html.contains("test-state"))
+      check(page.2.value(forHTTPHeaderField: "Cache-Control") == "no-store")
+      let policy = try require(page.2.value(forHTTPHeaderField: "Content-Security-Policy"))
+      check(policy.contains("script-src 'nonce-") && policy.contains("connect-src 'self'"))
+      check(!policy.contains("unsafe-inline"))
+    }
+    check(await f.store.approvals().count == 1)
+    let statusPath = "/approval/status?id=\(pending.id)"
+    let waiting = try await request(statusPath)
+    check(waiting.0 == 200)
+    check(try JSONSerialization.jsonObject(with: waiting.1) as? [String: Bool] == ["ready": false])
+    check(try await request(statusPath, headers: ["Origin": "https://evil.example"]).0 == 403)
+    check(try await request(statusPath, method: "POST").0 == 404)
     check(try await request("/approve", method: "POST", body: "{}").0 == 404)
     try await f.store.decide(id: pending.id, approve: true)
+    for _ in 0..<3 {
+      let ready = try await request(statusPath)
+      check(ready.0 == 200)
+      check(try JSONSerialization.jsonObject(with: ready.1) as? [String: Bool] == ["ready": true])
+    }
     let redirect = try await request("/approval?id=\(pending.id)")
     check(redirect.0 == 302)
     let location = try require(redirect.2.value(forHTTPHeaderField: "Location"))
@@ -113,6 +138,19 @@ struct HTTPTests {
     check(exchange.0 == 200)
     let tokens = try JSONDecoder().decode(TokenResponse.self, from: exchange.1)
     check(exchange.2.value(forHTTPHeaderField: "Cache-Control") == "no-store")
+    check(try await request(statusPath).0 == 400)
+    let ended = try await request(waitingPath)
+    check(ended.0 == 400)
+    check(ended.2.value(forHTTPHeaderField: "Content-Type") == "text/html; charset=utf-8")
+    check(String(decoding: ended.1, as: UTF8.self).contains("Start login again in your client"))
+
+    let deniedID = try await f.store.begin(fields)
+    try await f.store.decide(id: deniedID, approve: false)
+    check(try await request("/approval/status?id=\(deniedID)").0 == 200)
+    let denial = try await request("/approval?id=\(deniedID)")
+    check(denial.0 == 302)
+    let deniedLocation = try require(denial.2.value(forHTTPHeaderField: "Location"))
+    check(deniedLocation.contains("error=access_denied") && !deniedLocation.contains("code="))
 
     let initialize = """
       {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"acceptance","version":"1"},"capabilities":{"experimental":{"codex/auth-change":{}}}}}

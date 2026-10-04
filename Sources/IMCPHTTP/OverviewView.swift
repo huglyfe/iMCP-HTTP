@@ -1,10 +1,10 @@
 import IMCPCore
 import SwiftUI
 
-/// iMCP's compact menu-bar interaction, backed by this app's HTTP runtime.
+/// The familiar compact panel shares the main window’s single runtime.
 struct OverviewView: View {
   @ObservedObject var runtime: AppRuntime
-  @Environment(\.openSettings) private var openSettings
+  @Environment(\.openWindow) private var openWindow
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -40,12 +40,12 @@ struct OverviewView: View {
         Button("Dismiss") { runtime.errorMessage = nil }
       }
       Divider()
-      Button("Settings…") {
+      Button("Open iMCP-HTTP…") {
         NSApp.activate(ignoringOtherApps: true)
-        openSettings()
+        openWindow(id: "main")
       }
       Divider()
-      Button("Quit iMCP-HTTP") { Task { await runtime.quit() } }
+      Button("Quit iMCP-HTTP") { NSApp.terminate(nil) }
     }
     .buttonStyle(.plain)
     .padding(14)
@@ -110,6 +110,7 @@ struct ApprovalsView: View {
       VStack(alignment: .leading, spacing: 8) {
         Text("Connection request: \(request.clientName)").font(.headline)
         Text("Allow access to enabled tools until revoked?").font(.callout)
+        Text("macOS will ask you to authenticate.").font(.caption).foregroundStyle(.secondary)
         Text("Approve only a login you just started. Client names are unverified labels.")
           .font(.caption).foregroundStyle(.secondary)
         Text("Client ID: \(request.clientID)").font(.caption.monospaced()).textSelection(.enabled)
@@ -117,8 +118,14 @@ struct ApprovalsView: View {
         HStack {
           Button("Deny", role: .cancel) { Task { await runtime.decide(request, approve: false) } }
           Spacer()
-          Button("Approve") { Task { await runtime.decide(request, approve: true) } }
-            .buttonStyle(.borderedProminent)
+          if runtime.authenticatingRequestID == request.id {
+            ProgressView().controlSize(.small)
+          }
+          Button(runtime.authenticatingRequestID == request.id ? "Authenticating…" : "Approve") {
+            Task { await runtime.decide(request, approve: true) }
+          }
+          .buttonStyle(.borderedProminent)
+          .disabled(runtime.authenticatingRequestID != nil || runtime.state != .running)
         }
       }
     }

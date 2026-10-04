@@ -63,9 +63,8 @@ try:
     with urllib.request.urlopen(url, timeout=5) as response:
         page = response.read().decode()
     pending = re.search(r"/approval\?id=([A-Za-z0-9_-]+)", page)
-    assert pending
     stage = "approval callback"
-    while time.monotonic() < end:
+    while pending and time.monotonic() < end:
         time.sleep(0.1)
         with urllib.request.urlopen(issuer + "/approval?id=" + pending.group(1), timeout=5) as response:
             page = response.read().decode()

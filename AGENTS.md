@@ -4,7 +4,7 @@ Build a small native Mac app one owner can understand and maintain. Read `docs/P
 
 ## Boundaries
 
-- Preserve iMCP’s menu-bar-only outer shape: no Dock icon or main window; compact panel and on-demand Settings. Keep the HTTP core independent.
+- Use one normal Mac window with a Dock icon and a persistent compact menu-bar panel. Closing the window keeps the server running; Quit stops it. Keep the HTTP core independent.
 - Services contain global individual-tool switches. All approved clients share those choices; account-wide access does not mean omitting tool controls.
 
 - SwiftUI displays runtime state and submits owner decisions. Core code must not depend on SwiftUI bindings.

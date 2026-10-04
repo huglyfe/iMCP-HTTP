@@ -64,6 +64,10 @@ struct LocalResponder: HTTPResponder {
     do {
       return try await route(request)
     } catch let failure as OAuthFailure {
+      if failure.code == "expired_request", request.method == .get, request.uri.path == "/approval"
+      {
+        return try page(status: .badRequest, content: ApprovalPage.expired)
+      }
       return error(
         failure.code,
         status: failure.code == "temporarily_unavailable" ? .tooManyRequests : .badRequest)
@@ -115,7 +119,15 @@ struct LocalResponder: HTTPResponder {
     case (.get, "/authorize"):
       let fields = try form(request.uri.query ?? "")
       let id = try await authorization.begin(fields)
-      return waiting(id: id)
+      // Refreshing the waiting page must never create another authorization request.
+      var response = Response(status: .seeOther, headers: [.location: "/approval?id=\(id)"])
+      protect(&response)
+      return response
+    case (.get, "/approval/status"):
+      let fields = try form(request.uri.query ?? "")
+      guard fields.count == 1, let id = fields["id"] else { throw OAuthFailure("invalid_request") }
+      let ready = try await authorization.approvalReady(for: id)
+      return try json(["ready": ready])
     case (.get, "/approval"):
       let fields = try form(request.uri.query ?? "")
       guard fields.count == 1, let id = fields["id"] else { throw OAuthFailure("invalid_request") }
@@ -124,7 +136,7 @@ struct LocalResponder: HTTPResponder {
         protect(&response)
         return response
       }
-      return waiting(id: id)
+      return try page { ApprovalPage.html(id: id, nonce: $0) }
     case (.post, "/token"):
       guard
         request.headers[.contentType]?.split(separator: ";").first
@@ -165,19 +177,16 @@ struct LocalResponder: HTTPResponder {
     try URLEncodedFormDecoder().decode([String: String].self, from: raw)
   }
 
-  private func waiting(id: String) -> Response {
-    // Only internally generated base64url IDs enter HTML. No client labels, state, or codes.
+  private func page(
+    status: HTTPTypes.HTTPResponse.Status = .ok, content: (String) -> String
+  ) throws -> Response {
+    let nonce = try Credential.make()
     var response = Response(
-      status: .ok, headers: [.contentType: "text/html; charset=utf-8"],
-      body: .init(
-        byteBuffer: ByteBuffer(
-          string: """
-            <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-            <meta http-equiv="refresh" content="1;url=/approval?id=\(id)"><title>Approve in iMCP-HTTP</title></head>
-            <body><h1>Approve in iMCP-HTTP</h1><p>Open the iMCP-HTTP app to approve or deny this connection.</p>
-            <p>This page will return to your client after your decision. The request expires in three minutes.</p></body></html>
-            """)))
+      status: status, headers: [.contentType: "text/html; charset=utf-8"],
+      body: .init(byteBuffer: ByteBuffer(string: content(nonce))))
     protect(&response)
+    response.headers[HTTPField.Name("Content-Security-Policy")!] =
+      "default-src 'none'; script-src 'nonce-\(nonce)'; style-src 'nonce-\(nonce)'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
     return response
   }
 

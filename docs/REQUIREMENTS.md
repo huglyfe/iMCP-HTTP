@@ -5,11 +5,12 @@ These are product contracts. Current implementation and verification limits are 
 ## OAuth and owner approval
 
 - Standard MCP-compatible OAuth authorization code + PKCE S256, with RFC 7591 dynamic registration for public local clients. No custom client software or repeated manual token pasting in the intended experience.
-- Authenticate the owner's decision through the native app, bound to one pending authorization request. A browser page or client-supplied name alone cannot approve itself.
+- Authenticate each new owner approval with macOS LocalAuthentication device-owner policy, including the system password fallback. Bind success to that exact pending request and recheck expiry/server state before issuing a code. Cancellation, failure, unavailable authentication, denial, or pause grants nothing. Serialize prompts; discard late results. No app-wide unlocked interval, custom pairing code, or master password. Deny/revoke and routine token refresh do not require authentication. A browser page or client-supplied name alone cannot approve itself.
 - Keep the first UI minimal: client label, explanation of account-wide enabled access, Approve, Deny. Show the client identifier/details when needed to distinguish requests.
 - The grant persists until explicitly revoked. Store a distinct grant per authorized connection; do not use one shared owner API key.
 - Registration accepts only bounded local callback metadata, creates no approval or grant, and uses the same atomic store as grants. Bound registration rate and count; unused registrations may be pruned, while active grants keep their client registration. No client-specific authentication branches or legacy store migration.
 - Pending requests and codes expire; codes are single-use, bound to client, callback, resource, and PKCE challenge. Bound pending requests and attempts to prevent unbounded approval prompts.
+- The browser waits on one stable approval URL without automatic page reloads. Refreshing that URL keeps the same request. Read-only status checks never consume or expose the OAuth callback. Navigate once after the native decision; show clear expiry and connection-error recovery. An approved or denied request has a full one-minute callback window after the decision.
 - Serve protected-resource and authorization-server metadata appropriate to the negotiated MCP/OAuth profile. Use a stable issuer/resource and strict registered callback validation, including standard loopback-port rules.
 - Validate issuer, resource/audience, credential expiry, grant revocation, and scope on every applicable exchange/request. Use one account-access scope initially if needed by the protocol; no granular permission editor.
 - Access/refresh credentials remain out of URLs, tool results, logs, repository config, screenshots, and support dumps. Authorization-code callbacks follow the standard flow and must not be logged.
@@ -19,11 +20,13 @@ These are product contracts. Current implementation and verification limits are 
 
 ## Native interface
 
-- iMCP-style menu-bar-only accessory app: no Dock icon or main application window. A compact panel holds server/service controls; Settings may open on demand.
-- The menu panel omits the setup-command button and app-name subtitle. Distinct service colors apply consistently in the panel and Settings. Setup contains an alphabetical, searchable client directory with instructions, copyable configuration, vendor links, and honest compatibility labels. Hosted clients that cannot reach loopback have explanatory entries rather than nonfunctional setup commands.
-- Settings exposes individual tools within each service, client approval/revocation, and connection setup. Tool choices are global across all approved clients and available accounts, not client-specific permissions.
+- One normal, resizable Mac window with a Dock icon and Command-Tab presence, plus a persistent menu-bar icon. Preserve Services, Connections, and Setup in a clearly spaced native tab strip below the title bar with one content area and no enclosing tab box; no sidebar redesign or duplicate Settings interface. Closing the window keeps access running; reopening presents the single window. Every Quit route stops the listener before termination.
+- Preserve the compact menu panel with its server/service switches, pending approvals, Open, and Quit. It omits setup commands and the app-name subtitle. Services retains distinct colors for each service. Setup contains an alphabetical, searchable client directory with instructions, copyable configuration, vendor links, and honest compatibility labels. Hosted clients that cannot reach loopback have explanatory entries rather than nonfunctional setup commands.
+- The main window exposes individual tools within each service, client approval/revocation, and connection setup. Tool choices are global across all approved clients and available accounts, not client-specific permissions.
+- Within each service, Services lists read-only tools first and write tools afterward, labeled “Read-only” and “Write” using the protocol tool metadata. Service sections omit the enabled/disabled status footer. Preserve the existing compact tool rows and searchable client directory.
+- Put the shared-controls note at the top of Services. Omit the explanatory footers in Connections and Setup; keep client instructions, compatibility labels, and pending-approval details. Revoke is visibly red.
 - Disabled tools are omitted from discovery and rejected on subsequent calls by name, including stale client discovery. Persist choices across restart; turning a service off still blocks every tool in it.
-- Start the server at app launch independently of menu-panel presentation. Dismissing panels/Settings leaves it running; Quit stops it. Keep one process, lazy native stores, and measure idle memory before claiming RAM improvements.
+- Start the server at app launch independently of menu-panel presentation. Closing the window or menu panel leaves it running; Quit stops it. Keep one process, lazy native stores, and measure idle memory before claiming RAM improvements.
 
 ## HTTP and lifecycle
 

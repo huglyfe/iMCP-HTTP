@@ -1,8 +1,8 @@
 # iMCP-HTTP
 
-A native Mac app that gives approved AI clients access to Apple services over MCP Streamable HTTP. One process, an iMCP-style menu-bar panel, and Settings. No Dock icon or main window.
+A native Mac app that gives approved AI clients access to Apple services over MCP Streamable HTTP. One process, one normal Mac window, and a persistent menu-bar icon. Closing the window keeps the server running; Quit stops it.
 
-**Development implementation:** loopback HTTP, native OAuth approval, durable client grants, pause/revoke, and native Reminders, Calendar, Contacts, Maps, and read-only Photos metadata tools. Real Codex login, fixture tool calls, restart, and revocation are tested. OpenCode dynamic registration and OAuth login are also tested. Native UI, macOS permission prompts, and real disposable Apple-service writes still need manual acceptance. This repository remains private.
+**Development implementation:** loopback HTTP, macOS-authenticated OAuth approval, durable client grants, pause/revoke, and native Reminders, Calendar, Contacts, Maps, and read-only Photos metadata tools. Real Codex login, fixture tool calls, restart, and revocation are tested. OpenCode dynamic registration and OAuth login are also tested. The native approval flow was verified through macOS authentication, OAuth exchange, connection check, refresh, deny, and revoke. Remaining window/menu checks, macOS data-permission prompts, and disposable Apple-service writes still need manual acceptance. This repository remains private.
 
 ## Develop
 
@@ -23,16 +23,15 @@ Start the app, then:
 
 ```sh
 codex mcp add imcp-http --url http://127.0.0.1:18765/mcp
-codex mcp login imcp-http
 ```
 
-Approve the pending request from the menu-bar icon. Clients register automatically using standard OAuth Dynamic Client Registration, then use PKCE and native approval. No client secret or manual token is needed. Names identify requests for display only; approve a login you initiated.
+The add command starts login automatically. Approve the pending request in Connections or the menu-bar panel, then authenticate with macOS. Clients register automatically using standard OAuth Dynamic Client Registration, then use PKCE and native approval. No client secret or manual token is needed. Names identify requests for display only; approve a login you initiated.
 
-Settings → Setup has a searchable alphabetical directory for ChatGPT, Claude Code, Claude Desktop, Codex, Cursor, Gemini CLI, OpenCode, VS Code, Windsurf, and Zed. Each entry includes vendor documentation and verification status. Local-client recipes use the current endpoint; hosted connector entries explain why they cannot reach this Mac directly. No client configuration or tunnel is installed automatically.
+Setup has a searchable alphabetical directory for ChatGPT, Claude Code, Claude Desktop, Codex, Cursor, Gemini CLI, OpenCode, VS Code, Windsurf, and Zed. Each entry includes vendor documentation and verification status. Local-client recipes use the current endpoint; hosted connector entries explain why they cannot reach this Mac directly. No client configuration or tunnel is installed automatically.
 
-Approval lasts until revoked. Tokens expire after 15 minutes and refresh without a new approval. The server switch pauses access; closing the menu panel or Settings keeps the app running. Revoke prevents subsequent calls and refresh. Existing calls may already have completed.
+Approval lasts until revoked. Tokens expire after 15 minutes and refresh without a new approval. The server switch pauses access; closing the window or menu panel keeps the app running. Revoke prevents subsequent calls and refresh. Existing calls may already have completed.
 
-Enable each service in the menu panel and accept its macOS permission prompt when needed. Settings → Services also exposes individual tool switches. Disabled tools disappear from discovery and subsequent calls by name fail; all approved clients share these global choices. Approved clients share access across this Mac user's available accounts. Photos uses PhotoKit without opening Photos.app; its tools read metadata only. Maps uses supplied locations and does not request device location. Reconnect clients after changing services or tools to refresh their tool list. There is no per-list policy editor.
+Enable each service in Services and accept its macOS permission prompt when needed. The same page exposes individual tool switches. The compact menu panel retains its service switches. Disabled tools disappear from discovery and subsequent calls by name fail; all approved clients share these global choices. Approved clients share access across this Mac user's available accounts. Photos uses PhotoKit without opening Photos.app; its tools read metadata only. Maps uses supplied locations and does not request device location. Reconnect clients after changing services or tools to refresh their tool list. There is no per-list policy editor.
 
 ## Tools
 
@@ -77,7 +76,7 @@ Optional real-client acceptance requires `codex`, `opencode`, and `python3` on P
 IMCP_RUN_CLIENT_ACCEPTANCE=1 ./scripts/check.sh
 ```
 
-The fixtures use standard dynamic registration, isolated temporary state, and the native decision API, with no model turns or production client configuration changes. Codex tests all five services against fake data, restart, and revocation, then logs out its unique test credential. OpenCode tests registration/login and verifies that the server saved the resulting grant. OpenCode tool/restart/revoke acceptance remains unverified: its status command alone does not prove fresh authorized access. These tests do not verify native clicks. Listener tests use ports 19765 and 19767.
+The fixtures use standard dynamic registration, isolated temporary state, and the native decision API, with no model turns or production client configuration changes. Codex tests all five services against fake data, restart, and revocation, then logs out its unique test credential. OpenCode tests registration/login and verifies that the server saved the resulting grant. OpenCode tool/restart/revoke acceptance remains unverified: its status command alone does not prove fresh authorized access. Separate approval-boundary tests inject a fake authenticator and cover cancellation, expiry, denial, duplicate prompts, and late success after pause/restart. These tests do not verify native authentication or UI clicks. Listener tests use ports 19765 and 19767.
 
 For isolated manual acceptance, launch the bundle executable with `IMCP_HTTP_DATA_DIR` set to a temporary directory and `IMCP_HTTP_PORT` set to another loopback port. Keep these development overrides out of production launch configuration.
 

@@ -93,6 +93,14 @@ Reviewed official MCP authorization (2025-11-25), RFC 7591, and RFC 8252 for sta
 
 Setup recipes reference the official pages linked in `Sources/IMCPHTTP/ClientSetup.swift`: OpenAI MCP and ChatGPT connection docs, Claude Code/Claude connector docs, Cursor MCP, Gemini CLI MCP, OpenCode MCP, VS Code MCP, Windsurf/Devin Desktop MCP, and Zed MCP. Documentation establishes configuration shape, not end-to-end acceptance. No vendor code was copied. The directory keeps those two kinds of evidence distinct.
 
+Login follow-up, 2026-10-04: consulted the official Codex MCP guide and installed `codex mcp add --help`, then verified actual single-command add/login using disposable configuration and credentials. The separate login command is unnecessary for initial setup on the tested CLI. Replaced meta-refresh with a small nonce-protected waiting page and read-only status polling; no third-party browser code or new dependency was introduced.
+
 ## Listener lifetime and memory review
 
 Inspected the pinned Hummingbird 2.27.0 `Application` event-loop provider and SwiftNIO 2.103.0 `MultiThreadedEventLoopGroup.withEventLoopGroup` lifecycle API. The default singleton scales its workers with CPU cores. Use one scoped worker for this bounded local listener, with automatic shutdown on return; no new thread-management abstraction or environment setting is needed. Release-mode probes use temporary app state, disabled Apple services, public metadata requests, and process memory metrics. No third-party source was copied.
+
+## Native app and authenticated approval, 2026-10-04
+
+The owner approved a normal Mac window alongside the persistent menu-bar icon, superseding the earlier accessory-only direction. Reviewed Apple’s [single Window and MenuBarExtra scene guidance](https://developer.apple.com/videos/play/wwdc2022/10061/) and [LocalAuthentication device-owner policy](https://developer.apple.com/documentation/LocalAuthentication/LAPolicy/deviceOwnerAuthentication), plus installed LAContext headers for evaluation and invalidation. Use one shared runtime, a fresh context per approval, macOS password fallback, and asynchronous termination cleanup. No third-party implementation was copied; no pairing-code exchange or new service was added.
+
+The owner chose to preserve the original compact controls and three tabs, with the tab strip below the title bar. Reviewed OnlySwitch at `0036625f1554f0d4798ffd50383679b8ce1fc3b4` (`OnlySwitchListView.swift`, `SettingsView.swift`) and the segmented-control reference in [Sindre Sorhus’s Settings](https://github.com/sindresorhus/Settings/tree/f41475771f65379ca10852c95119a7f53f0de5a5). Use a standard SwiftUI segmented picker below the title bar and keep the original service rows. The owner rejected the extra enclosing border produced by grouped tabs; the content has no surrounding tab box. These are interaction references only: no source copied, new dependency, or sidebar introduced.

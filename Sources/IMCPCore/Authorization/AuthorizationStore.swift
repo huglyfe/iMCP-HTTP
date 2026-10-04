@@ -185,6 +185,8 @@ public actor AuthorizationStore {
     }
     callback.queryItems = query
     item.callbackURL = callback.url
+    // A decision near the pending deadline still gets the full callback/code lifetime.
+    item.expiresAt = now().addingTimeInterval(60)
     pending[id] = item
     publish()
   }
@@ -198,6 +200,13 @@ public actor AuthorizationStore {
       return callback
     }
     return nil
+  }
+
+  /// Read-only browser polling must not consume the one-time OAuth callback.
+  func approvalReady(for id: String) throws -> Bool {
+    prune()
+    guard let item = pending[id] else { throw OAuthFailure("expired_request") }
+    return item.callbackURL != nil
   }
 
   func exchange(_ fields: [String: String]) throws -> TokenResponse {

@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 
 @testable import IMCPCore
@@ -49,6 +50,27 @@ struct AuthorizationFixture {
 }
 
 struct AuthorizationTests {
+  @Test func approvalNearExpiryRetainsItsFullCallbackWindow() async throws {
+    let f = try await AuthorizationFixture()
+    defer { f.cleanup() }
+    let clock = ApprovalClock()
+    let store = try AuthorizationStore(
+      configuration: f.configuration, storeURL: f.directory.appendingPathComponent("grants.json"),
+      now: { clock.now.withLock { $0 } })
+    let id = try await store.begin(f.fields())
+    clock.now.withLock { $0 = $0.addingTimeInterval(179) }
+    try await store.decide(id: id, approve: true)
+    clock.now.withLock { $0 = $0.addingTimeInterval(2) }
+    #expect(try await store.approvalReady(for: id))
+    #expect(try await store.approvalReady(for: id))
+    let callback = try #require(try await store.callback(for: id))
+    let code = try #require(
+      URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems?
+        .first { $0.name == "code" }?.value)
+    _ = try await store.exchange(f.exchangeFields(code))
+    await expectFailure { try await store.approvalReady(for: id) }
+  }
+
   @Test func approveRestartRefreshRevoke() async throws {
     let f = try await AuthorizationFixture()
     defer { f.cleanup() }
@@ -177,4 +199,8 @@ struct AuthorizationTests {
 
   }
 
+}
+
+private final class ApprovalClock: Sendable {
+  let now = Mutex(Date())
 }

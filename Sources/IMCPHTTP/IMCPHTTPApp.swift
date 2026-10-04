@@ -5,22 +5,24 @@ struct IMCPHTTPApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
   var body: some Scene {
+    Window("iMCP-HTTP", id: "main") {
+      MainView(runtime: delegate.runtime)
+    }
+    .defaultSize(width: 580, height: 540)
+
     MenuBarExtra {
       OverviewView(runtime: delegate.runtime)
     } label: {
       MenuIcon(runtime: delegate.runtime)
     }
     .menuBarExtraStyle(.window)
-
-    Settings {
-      SettingsView(runtime: delegate.runtime)
-    }
   }
 }
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
   let runtime = AppRuntime()
+  private var terminating = false
 
   func applicationDidBecomeActive(_ notification: Notification) {
     runtime.refreshServiceStatus()
@@ -29,6 +31,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_ notification: Notification) {
     // Server lifetime belongs to the app, independent of whether its panel is open.
     runtime.startIfNeeded()
+  }
+
+  func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+  func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    if !terminating {
+      terminating = true
+      Task {
+        await runtime.stop()
+        sender.reply(toApplicationShouldTerminate: true)
+      }
+    }
+    return .terminateLater
   }
 }
 

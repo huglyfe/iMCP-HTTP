@@ -4,6 +4,7 @@ The Swift fixture owns native approval, restart, and revocation. Only control
 markers are written here; authorization URLs and credentials stay in memory.
 """
 import json
+import os
 import pathlib
 import queue
 import re
@@ -19,8 +20,13 @@ issuer = sys.argv[2]
 name = "imcp-http-test-" + root.name
 config = 'mcp_servers={"' + name + '"={url="' + issuer + '/mcp"}}'
 flags = ["-c", config, "-c", 'mcp_oauth_credentials_store="keyring"']
-proc = subprocess.Popen(["codex", "app-server", "--stdio", *flags], stdin=subprocess.PIPE,
-                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1)
+env = os.environ.copy()
+# Scope the add command's configuration writes to this disposable client home.
+env["CODEX_HOME"] = str(root / "codex")
+(root / "codex").mkdir()
+env["BROWSER"] = "/usr/bin/false"
+proc = None
+login = None
 messages = queue.Queue()
 backlog = []
 
@@ -30,7 +36,6 @@ def drain():
             messages.put(json.loads(line))
         except json.JSONDecodeError:
             pass
-threading.Thread(target=drain, daemon=True).start()
 
 def has_connection(value):
     if isinstance(value, dict):
@@ -83,28 +88,51 @@ def terminate(signum, frame):
     raise SystemExit(1)
 
 signal.signal(signal.SIGTERM, terminate)
-stage = "initialize"
+stage = "single-command add and login"
 try:
-    send("initialize", {"clientInfo": {"name": "imcp-http-test", "version": "1"},
-                        "capabilities": {"experimentalApi": True}}, 1)
-    response(1)
-    send("initialized", {})
-    stage = "login"
-    send("mcpServer/oauth/login", {"name": name, "timeoutSecs": 40}, 2)
-    auth = response(2)
-    with urllib.request.urlopen(auth["authorizationUrl"], timeout=5) as r:
+    login = subprocess.Popen(["codex", "-c", 'mcp_oauth_credentials_store="keyring"',
+                              "mcp", "add", name, "--url", issuer + "/mcp"],
+                             env=env, cwd=root, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, text=True, bufsize=1)
+    login_lines = queue.Queue()
+    def drain_login():
+        for line in login.stdout:
+            login_lines.put(line)
+    threading.Thread(target=drain_login, daemon=True).start()
+    end = time.monotonic() + 40
+    authorization_url = None
+    while time.monotonic() < end:
+        try:
+            line = login_lines.get(timeout=1)
+        except queue.Empty:
+            if login.poll() is not None:
+                break
+            continue
+        match = re.search(re.escape(issuer) + r"/authorize\?[^\s\x1b]+", line)
+        if match:
+            authorization_url = match.group(0)
+            break
+    assert authorization_url, "Add did not start OAuth automatically"
+    with urllib.request.urlopen(authorization_url, timeout=5) as r:
         page = r.read().decode()
     pending = re.search(r"/approval\?id=([A-Za-z0-9_-]+)", page)
-    assert pending, "No native approval request"
-    end = time.monotonic() + 30
-    while time.monotonic() < end:
+    while pending and time.monotonic() < end:
         time.sleep(0.1)
         with urllib.request.urlopen(issuer + "/approval?id=" + pending.group(1), timeout=5) as r:
             page = r.read().decode()
         if "/approval?id=" not in page:
             break
-    complete = receive(lambda m: m.get("method") == "mcpServer/oauthLogin/completed")
-    assert complete["params"]["success"], "OAuth did not complete"
+    login.wait(timeout=10)
+    assert login.returncode == 0, "Add/login did not complete"
+    stage = "initialize"
+    proc = subprocess.Popen(["codex", "app-server", "--stdio", *flags], env=env,
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL, text=True, bufsize=1)
+    threading.Thread(target=drain, daemon=True).start()
+    send("initialize", {"clientInfo": {"name": "imcp-http-test", "version": "1"},
+                        "capabilities": {"experimentalApi": True}}, 1)
+    response(1)
+    send("initialized", {})
     stage = "thread"
     send("thread/start", {"ephemeral": True, "cwd": str(root)}, 3)
     thread = response(3)["thread"]["id"]
@@ -148,20 +176,22 @@ try:
     denied = receive(lambda m: m.get("id") == 7)
     assert not has_connection(denied), "Revocation did not deny tool"
     assert "error" in denied or denied.get("result", {}).get("isError") is True, "No failure reported"
-    print("Real Codex: OAuth, discovery, Reminders/Calendar/Contacts/Maps/Photos fixtures, restart, revocation passed.", flush=True)
+    print("Real Codex: single-command add/login, discovery, Reminders/Calendar/Contacts/Maps/Photos fixtures, restart, revocation passed.", flush=True)
 except Exception as error:
     # Error messages can include URLs or tokens. Report only the stage and type.
     print("Codex acceptance failed at " + stage + ": " + type(error).__name__, flush=True)
     sys.exit(1)
 finally:
-    proc.terminate()
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait()
+    for child in [proc, login]:
+        if child is not None and child.poll() is None:
+            child.terminate()
+            try:
+                child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait()
     cleanup = subprocess.run(["codex", *flags, "mcp", "logout", name], stdout=subprocess.DEVNULL,
-                   stderr=subprocess.DEVNULL, timeout=10, check=False)
+                   stderr=subprocess.DEVNULL, env=env, timeout=10, check=False)
 
     if cleanup.returncode != 0:
         print("Could not confirm test credential cleanup.", flush=True)

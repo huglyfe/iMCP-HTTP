@@ -1,14 +1,21 @@
 # Initial implementation plan
 
-Agreed 2026-10-02; implementation updated 2026-10-03. Completed code and verified behavior are distinguished below.
+Agreed 2026-10-02; implementation updated 2026-10-04. Completed code and verified behavior are distinguished below.
 
 ## Progress
+
+- Approved 2026-10-04 slice: normal single-window app with persistent menu-bar controls, macOS-authenticated OAuth approvals, and focused acceptance/cleanup. No new services, BLE, network access, signing setup, or AppleScript adapters in this slice. Earlier menu-bar-only decisions below are historical and superseded.
+- Implemented the normal window with a native Services/Connections/Setup strip below the title bar, one content area, and the familiar compact menu. Services shows its shared-controls note first; Connections/Setup omit explanatory footers; Revoke is red. The owner rejected the sidebar redesign and enclosing tab border, and both were removed.
+- Each new approval uses a fresh LocalAuthentication context. One optional attempt value ties authentication to the exact request and rejects stale results. OAuth exchanges and grants remain unchanged; all Quit routes await listener shutdown.
+- Initial app/authentication milestone passed 51 tests, formatting, build, and bundle/signature validation. Real Codex fixture tools/restart/revoke and OpenCode registration/login passed. Computer use recovered and verified navigation, client search, and the single-container layout. The owner completed macOS authentication twice; PKCE exchange, connection_check, refresh, native revoke, rejection after revoke, and native Deny passed. Both temporary grants were revoked; no Apple records were accessed.
+- The owner accepted the final UI. Native inspection verified the final tab contents, including the single Codex setup command. Window close/reopen preserved the listener, and Command-Q released it.
+- Login follow-up: removed the one-second browser reload in favor of quiet status checks and a stable approval URL. Page refresh preserves one request; errors offer retry or restart guidance; decisions near expiry keep a full callback window. Expired or consumed links show a readable end-of-request page. Codex setup now shows only `mcp add`, verified to start and finish login automatically in isolated configuration. All 55 tests and canonical checks pass. Live browser rendering, manual refresh without duplicate approval, and native Deny/validated callback passed. The owner's saved Codex connection was preserved. Final relaunch and visual inspection of the expired-link page were blocked by the locked Mac; the rebuilt bundle is ready to open.
 
 - Implemented in the private draft: SwiftMCP + Hummingbird, loopback MCP, native OAuth consent, durable grants, refresh rotation, revoke, pause/start, and working service controls.
 - Version 0.4.0 expands to 36 typed tools: connection check; Reminders account/list/item management, search/date ranges, start/URL/location/time alarms/recurrence; Calendar account/calendar/occurrence management; Contacts card/group management; Maps search/routes.
 - Clean tool contracts: explicit write targets, compact fetch summaries, detail on get, saved records on writes, no prose success envelope. iMCP, apple-reminders-mcp, and remindctl source review is recorded in INSPIRATION.
 - Automated checks cover service gates, strict input/patch/date/recurrence validation, native value mapping, explicitly disabled defaults, OAuth/HTTP, and SDK schemas. The opt-in Codex fixture exercises all five services with fake data, restart, and revocation. The OpenCode fixture proves dynamic registration/login and a persisted grant; its tool/restart/revoke acceptance remains pending.
-- Remaining release gates: native Approve/Deny clicks, menu/Settings behavior, macOS permission flows, disposable records and cleanup, live Maps results, signing/permission persistence, sleep/wake, and memory under enabled-service workloads. Computer-use app inspection currently times out; fixture tests do not replace this acceptance.
+- Remaining release gates: native authentication cancellation/retry, menu Open/pause/start/Quit, macOS permission flows, disposable records and cleanup, live Maps results, signing/permission persistence, sleep/wake, and memory under enabled-service workloads. Fixture tests do not replace the remaining native acceptance.
 - Added three read-only Photos metadata tools through PhotoKit; 39 tools across five services. Photos is disabled until explicitly selected. Replaced UI polling with authorization snapshots and an approval-expiry timer. Lean Reminders fetch snapshots omit detail arrays and unused notes; full native fetch before pagination remains an EventKit constraint.
 - Owner chose direct frameworks and deferred automation. Mail/Notes/Music AppleScript adapters are not being added. WeatherKit/MusicKit require signing/capability proof; Messages/Phone private-store access and HomeKit’s Catalyst requirement need separate decisions. Location and Capture remain direct-framework candidates. No production integration cutover or public release.
 - Corrected UI direction: iMCP-style menu-bar-only app (no Dock icon or main window), compact service controls, Settings with global individual-tool switches and client management. The earlier window scaffold diverged from the intended outer shape; the HTTP/OAuth core remains independent.
@@ -17,6 +24,7 @@ Agreed 2026-10-02; implementation updated 2026-10-03. Completed code and verifie
 - Cleanup slice: implemented-service inventory only; service settings use a set; stateless validation belongs to tool handlers and native alarm/recurrence values are prepared once. AppRuntime has explicit startup failure categories, cancellable lifecycle ownership, and direct fixture tests.
 - Final cleanup review: fixed listener-task retention of AppRuntime, with an owner-release regression test. Scoped the HTTP listener to one event loop using the existing SwiftNIO dependency. Isolated release measurements cover disabled-service idle behavior and concurrent metadata requests; Apple-data workload measurements remain pending.
 - UI refinement: removed the home subtitle and setup-command button; added distinct service colors and an alphabetical searchable directory of ten clients. Vendor docs inform recipes; verified and unverified clients remain distinct.
+- Settings refinement: removed service status footers and grouped read-only tools before write tools, with both kinds labeled from existing tool metadata.
 - Owner confirms there are no existing grants and requests a clean forward design. Removed the fixed Codex registration and legacy settings/store decoding. All clients now use bounded RFC 7591 public registration plus native approval and PKCE; no client-specific OAuth exchanges, production integration changes, or remote exposure.
 
 ## Product
@@ -33,7 +41,7 @@ The latest repository instruction is private creation. Keep the code suitable fo
 - Global service enablement remains explicit and subject to macOS permissions.
 - Reminders editing and deletion are the first tool additions. Existing fetch/create behavior must become reliable enough to target those operations.
 - Intended initial inventory: Reminders, Calendar, Contacts, Photos, Location, Maps, Mail, Notes, Music, Messages, Phone, Home, Podcasts, News, Shortcuts, Weather, Capture, Utilities. Each adapter ships only after its requirements and availability are verified.
-- Menu-bar-only accessory app with a compact panel for server state, services, and pending approval. Settings holds individual tools, approved clients/revoke, and setup. Keep iMCP’s interaction concept while simplifying the core.
+- Normal Mac app with one resizable window, Dock icon, and persistent compact menu-bar panel. Services, Connections, and Setup live in the window; closing it keeps the runtime alive. Native macOS authentication gates each new OAuth approval. No new service in this slice.
 - Later ambition is broad Mac integration. Remote networking, computer control, native Reminders tags/subtasks, a plugin marketplace, and multi-user hosting are not first-release requirements.
 
 ## Bootstrap (completed before implementation)
@@ -42,6 +50,14 @@ The latest repository instruction is private creation. Keep the code suitable fo
 - App bundling script, canonical check command, and macOS CI workflow.
 - No listener, auth implementation, Apple permissions, or fake working controls.
 - No third-party runtime dependencies until the implementation spike selects pinned versions.
+
+## Current slice acceptance, 2026-10-04
+
+- Verify launch, a single window, Dock/Command-Tab, close/reopen, menu Open, pause/start, and all Quit routes. Closing UI must not stop the listener; Quit must release it.
+- In isolated state, start a standard OAuth request, approve with macOS authentication, and verify code exchange. Cancel authentication, retry, deny, expire a request, and pause during authentication; none may grant access accidentally. Verify password fallback on the owner’s Mac and normal remote-desktop workflow manually.
+- Preserve existing service/tool settings and grants. Verify the familiar service rows, read-only/write grouping, permission failure visibility, Setup search, and connection revoke. Keep the three tabs below the title bar with clear spacing.
+- Run `./scripts/check.sh` and opt-in client fixtures. Real native Apple-data, sleep/wake, and enabled-service memory acceptance remain distinct from fixture evidence.
+- BLE (first device: owner-provided Tenovi Pillbox with forthcoming protocol docs), signing-dependent services, and AppleScript services follow only after confirming this slice.
 
 ## 1. OAuth and transport feasibility
 
@@ -67,7 +83,7 @@ Persist owner grants until revoked. Access credentials may expire and refresh wi
 
 Implement service toggles reflecting real macOS authorization, client details, and revoke. Names are display labels. New sensitive services are disabled until the owner enables them; existing approved clients then share the enabled account-wide capabilities.
 
-Acceptance: connect -> approve -> use -> restart -> reconnect -> revoke -> reject subsequent tool calls and refresh. Pause stops tool access. Dismissing the panel or Settings leaves the app available; Quit stops it.
+Acceptance: connect -> approve -> use -> restart -> reconnect -> revoke -> reject subsequent tool calls and refresh. Pause stops tool access. Closing the window or menu panel leaves the app available; Quit stops it.
 
 ## 4. Bring across the iMCP suite
 
@@ -89,9 +105,9 @@ Codex on this Mac logs in once, lists enabled tools, edits and deletes a disposa
 
 ## Native acceptance checklist
 
-Still pending; fixture tests do not establish Apple-service acceptance. Use an isolated app state directory/port and an isolated client entry, then remove that entry and revoke its grant when finished. Never run an automated test against the owner's reminder data.
+Apple-service acceptance remains pending; fixture tests do not establish it. Native authentication success, refresh, revoke, and Deny have separate verified evidence above. Use an isolated app state directory/port and an isolated client entry, then remove that entry and revoke its grant when finished. Never run an automated test against the owner's reminder data.
 
-1. Verify global tool switches hide disabled tools and reject stale calls, persist across restart, and preserve service-level gating. Verify native Approve and Deny for separate login attempts, pause/start, panel dismiss/reopen, Settings, and Quit. Confirm startup listens without opening the panel and the app has no Dock icon. Enable Reminders through the native macOS permission flow.
+1. Verify global tool switches hide disabled tools and reject stale calls, persist across restart, and preserve service-level gating. Verify native Approve and Deny for separate login attempts, pause/start, window close/reopen, menu Open, and Quit. Confirm startup listens independently of presentation and the app has a Dock icon. Enable Reminders through the native macOS permission flow.
 2. Create two visibly named disposable lists in Reminders, for example `iMCP acceptance source <timestamp>` and `iMCP acceptance destination <timestamp>`. Discover their exact IDs; do not use an owner's existing list as an implicit target.
 3. Create identifiable disposable reminders with a date-only deadline, a named-zone timed deadline, and no due date. Verify each in Reminders and through `reminders_get`.
 4. Search the selected lists by a unique test-title prefix; verify today/overdue/upcoming/undated, completion filtering, due sort, and pagination against those items. Include a DST boundary fixture when practical.
