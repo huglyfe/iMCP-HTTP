@@ -13,7 +13,7 @@ private final class NoRedirect: NSObject, URLSessionTaskDelegate, Sendable {
 
 struct HTTPTests {
   @Test func realListenerEnforcesOAuthAndMCP() async throws {
-    let f = try AuthorizationFixture()
+    let f = try await AuthorizationFixture()
     defer { f.cleanup() }
     let (ready, continuation) = AsyncThrowingStream<Void, Error>.makeStream()
     let server = LocalServer(
@@ -69,9 +69,31 @@ struct HTTPTests {
         "/.well-known/oauth-authorization-server", headers: ["Host": "evil.example"]
       ).0 == 400)
 
+    let registered = try await request(
+      "/register", method: "POST",
+      body:
+        #"{"client_name":"HTTP fixture","redirect_uris":["http://127.0.0.1:49152/callback"],"token_endpoint_auth_method":"none","grant_types":["authorization_code","refresh_token"],"response_types":["code"]}"#
+    )
+    check(registered.0 == 201)
+    let registration = try require(
+      JSONSerialization.jsonObject(with: registered.1) as? [String: Any])
+    let clientID = try require(registration["client_id"] as? String)
+    check(registration["client_secret"] == nil)
+    check(registration["token_endpoint_auth_method"] as? String == "none")
+    check(await f.store.clients().isEmpty)
+    check(
+      try await request(
+        "/register", method: "POST", body: #"{"redirect_uris":["https://example.com/callback"]}"#
+      ).0 == 400)
+    check(
+      try await request("/register", method: "POST", body: String(repeating: "x", count: 8193)).0
+        == 413)
+
     // Standard browser request, followed by a native owner decision.
     var url = URLComponents()
-    url.queryItems = try f.fields().map { URLQueryItem(name: $0.key, value: $0.value) }
+    var fields = try f.fields()
+    fields["client_id"] = clientID
+    url.queryItems = fields.map { URLQueryItem(name: $0.key, value: $0.value) }
     let authorization = try await request("/authorize?\(url.percentEncodedQuery!)")
     check(authorization.0 == 200)
     let pending = try require(await f.store.approvals().first)
@@ -82,7 +104,9 @@ struct HTTPTests {
     let location = try require(redirect.2.value(forHTTPHeaderField: "Location"))
     let callback = try require(URLComponents(string: location))
     let code = try require(callback.queryItems?.first(where: { $0.name == "code" })?.value)
-    url.queryItems = f.exchangeFields(code).map { URLQueryItem(name: $0.key, value: $0.value) }
+    var exchangeFields = f.exchangeFields(code)
+    exchangeFields["client_id"] = clientID
+    url.queryItems = exchangeFields.map { URLQueryItem(name: $0.key, value: $0.value) }
     let exchange = try await request(
       "/token", method: "POST", body: url.percentEncodedQuery!,
       headers: ["Content-Type": "application/x-www-form-urlencoded"])

@@ -26,7 +26,6 @@ final class AppRuntime: ObservableObject {
   let configuration: ServerConfiguration
   private let storeURL: URL
   private var authorization: AuthorizationStore?
-  static let services: [AppleService] = [.reminders, .calendar, .contacts, .maps, .photos]
   private let eventStore = EventKitStore()
   private lazy var reminders = EventKitReminders(eventStore: eventStore)
   private lazy var calendar = EventKitCalendar(eventStore: eventStore)
@@ -47,7 +46,6 @@ final class AppRuntime: ObservableObject {
     case .calendar: calendar
     case .contacts: contacts
     case .maps: maps
-    default: preconditionFailure("Unimplemented service")
     }
   }
   private var directoryLock: StateDirectoryLock?
@@ -56,20 +54,37 @@ final class AppRuntime: ObservableObject {
   private var serverTask: Task<Void, Never>?
   private var observationTask: Task<Void, Never>?
 
-  init() {
+  typealias ServerRunner =
+    @Sendable (LocalServer, @escaping @Sendable () async -> Void) async throws -> Void
+  private let runServer: ServerRunner
+  private let saveSettings: (ServiceSettings, URL) throws -> Void
+
+  convenience init() {
     // Development acceptance can isolate state without touching the owner's saved grants.
     let environment = ProcessInfo.processInfo.environment
     let port = environment["IMCP_HTTP_PORT"].flatMap(Int.init) ?? 18765
-    configuration = ServerConfiguration(port: (1024...65535).contains(port) ? port : 18765)
+    let configuration = ServerConfiguration(port: (1024...65535).contains(port) ? port : 18765)
     let directory =
       environment["IMCP_HTTP_DATA_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
       ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
       .appendingPathComponent("iMCP-HTTP", isDirectory: true)
-    storeURL = directory.appendingPathComponent("grants.json")
+    self.init(configuration: configuration, directory: directory)
   }
 
-  var connectionCommand: String {
-    "codex mcp add imcp-http --url \(configuration.resource) --oauth-client-id codex"
+  init(
+    configuration: ServerConfiguration, directory: URL,
+    runServer: @escaping ServerRunner = { server, ready in try await server.run(onReady: ready) },
+    saveSettings: @escaping (ServiceSettings, URL) throws -> Void = { try $0.save(to: $1) }
+  ) {
+    self.configuration = configuration
+    storeURL = directory.appendingPathComponent("grants.json")
+    self.runServer = runServer
+    self.saveSettings = saveSettings
+  }
+
+  deinit {
+    observationTask?.cancel()
+    serverTask?.cancel()
   }
 
   func startIfNeeded() {
@@ -81,74 +96,115 @@ final class AppRuntime: ObservableObject {
   func start() {
     guard serverTask == nil, state != .starting else { return }
     state = .starting
-    do {
-      if directoryLock == nil {
+    if directoryLock == nil {
+      do {
         directoryLock = try StateDirectoryLock(directory: storeURL.deletingLastPathComponent())
-      }
-      if !settingsLoaded {
-        settings = try ServiceSettings.load(from: settingsURL)
-        for service in Self.services {
-          access(service).setEnabled(settings[service])
-          serviceStatus[service] = access(service).status
+      } catch {
+        if (error as? CocoaError)?.code == .fileLocking {
+          fail(
+            "App already running",
+            "Another iMCP-HTTP instance owns this state directory. Quit that instance and try again."
+          )
+        } else {
+          fail(
+            "State folder unavailable",
+            "The app could not open its state folder. Check folder access and available disk space."
+          )
         }
-        settingsLoaded = true
+        return
       }
-      if authorization == nil {
+    }
+    if !settingsLoaded {
+      do { settings = try ServiceSettings.load(from: settingsURL) } catch {
+        fail(
+          "Service settings could not load",
+          "Saved service settings could not be read. The file was preserved; repair it before restarting."
+        )
+        return
+      }
+      for service in AppleService.allCases {
+        access(service).setEnabled(settings[service])
+        serviceStatus[service] = access(service).status
+      }
+      settingsLoaded = true
+    }
+    if authorization == nil {
+      do {
         authorization = try AuthorizationStore(configuration: configuration, storeURL: storeURL)
+      } catch {
+        fail(
+          "Client access could not load",
+          "Saved client access could not be read or belongs to a different server address. The file was preserved."
+        )
+        return
       }
-    } catch {
-      state = .failed("Could not load saved client access")
-      errorMessage =
-        "Client access could not be loaded. Existing data was preserved. Another app instance may already own this state directory."
-      return
     }
     guard let authorization else { return }
-    serverTask = Task { [weak self, configuration, dispatcher] in
-      guard let self else { return }
-      await dispatcher.setDisabledTools(self.settings.disabledTools)
-      self.tools = await dispatcher.catalog()
-      await authorization.setAccepting(true)
+    errorMessage = nil
+    let disabledTools = settings.disabledTools
+    serverTask = Task { [weak self, configuration, dispatcher, runServer, directoryLock] in
+      // Keep exclusive state ownership until listener teardown finishes, even if
+      // the UI owner is released and its deinitializer cancels this task.
+      defer { withExtendedLifetime(directoryLock) {} }
+      var failure: String?
       do {
-        try await LocalServer(
-          configuration: configuration, authorization: authorization, dispatcher: dispatcher
-        ).run {
-          await self.didStart()
-        }
-        self.state = .stopped
+        await dispatcher.setDisabledTools(disabledTools)
+        self?.tools = await dispatcher.catalog()
+        try Task.checkCancellation()
+        await authorization.setAccepting(true)
+        try Task.checkCancellation()
+        try await runServer(
+          LocalServer(
+            configuration: configuration, authorization: authorization, dispatcher: dispatcher)
+        ) { [weak self] in await self?.didStart() }
       } catch {
-        if Task.isCancelled {
-          self.state = .stopped
-        } else {
-          self.state = .failed("Server could not start")
-          self.errorMessage =
-            "The local port may already be in use. Pause the other instance and try again."
+        if !Task.isCancelled {
+          failure =
+            self?.state == .running ? "Server stopped unexpectedly" : "Server could not start"
         }
       }
       await authorization.setAccepting(false)
-      self.serverTask = nil
-    }
-    observationTask?.cancel()
-    observationTask = Task { [weak self] in
-      for await snapshot in await authorization.updates() {
-        guard !Task.isCancelled else { return }
-        self?.approvals = snapshot.approvals
-        self?.clients = snapshot.clients
+      self?.serverTask = nil
+      if let failure {
+        self?.fail(
+          failure,
+          "The local HTTP listener failed. Check whether another app is using port \(configuration.port), then try starting again."
+        )
+      } else {
+        self?.state = .stopped
       }
     }
+    if observationTask == nil {
+      observationTask = Task { [weak self] in
+        for await snapshot in await authorization.updates() {
+          guard !Task.isCancelled else { return }
+          self?.approvals = snapshot.approvals
+          self?.clients = snapshot.clients
+        }
+      }
+    }
+  }
+
+  private func fail(_ title: String, _ message: String) {
+    state = .failed(title)
+    errorMessage = message
   }
 
   func refreshServiceStatus() {
     guard settingsLoaded else { return }
-    for service in Self.services { serviceStatus[service] = access(service).status }
+    for service in AppleService.allCases { serviceStatus[service] = access(service).status }
   }
 
-  private func didStart() { state = .running }
+  private func didStart() {
+    guard state == .starting, !Task.isCancelled else { return }
+    state = .running
+  }
 
   func stop() async {
     guard let task = serverTask else { return }
     state = .stopping
-    await authorization?.setAccepting(false)
     task.cancel()
+    await authorization?.setAccepting(false)
     await task.value
     approvals = []
   }
@@ -176,21 +232,29 @@ final class AppRuntime: ObservableObject {
     guard settingsLoaded, changingService == nil, changingTool == nil else { return }
     changingService = service
     defer { changingService = nil }
-    do {
-      if enabled, !(try await access(service).requestAccess()) {
+    if enabled {
+      do {
+        guard try await access(service).requestAccess() else {
+          errorMessage =
+            "Access was not granted. Allow \(service.title) in System Settings → Privacy & Security."
+          return
+        }
+      } catch {
         errorMessage =
-          "Access was not granted. Allow \(service.title) in System Settings → Privacy & Security."
+          "macOS could not request \(service.title) access. Check System Settings → Privacy & Security."
         return
       }
+    }
+    do {
       var updated = settings
       updated[service] = enabled
-      try updated.save(to: settingsURL)
+      try saveSettings(updated, settingsURL)
       access(service).setEnabled(enabled)
       settings = updated
       serviceStatus[service] = access(service).status
     } catch {
       errorMessage =
-        "The service setting could not be saved or permission could not be requested. Pause the server if you need to stop access."
+        "The service setting could not be saved. Its previous value is still active. Check disk access, or pause the server to stop access."
     }
   }
 
@@ -203,7 +267,7 @@ final class AppRuntime: ObservableObject {
     do {
       var updated = settings
       if enabled { updated.disabledTools.remove(name) } else { updated.disabledTools.insert(name) }
-      try updated.save(to: settingsURL)
+      try saveSettings(updated, settingsURL)
       await dispatcher.setDisabledTools(updated.disabledTools)
       settings = updated
     } catch {
@@ -216,8 +280,4 @@ final class AppRuntime: ObservableObject {
     NSApp.terminate(nil)
   }
 
-  func copyConnectionCommand() {
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(connectionCommand, forType: .string)
-  }
 }

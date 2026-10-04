@@ -112,7 +112,6 @@ public final class EventKitReminders: AppleAccess, ReminderAccess {
   }
 
   func create(listID: String, changes: ReminderChanges) throws -> ReminderRecord {
-    try changes.validate(creating: true)
     let calendar = try calendar(listID, writing: true)
     let reminder = EKReminder(eventStore: store)
     reminder.calendar = calendar
@@ -120,7 +119,6 @@ public final class EventKitReminders: AppleAccess, ReminderAccess {
     return try save(reminder)
   }
   func edit(id: String, changes: ReminderChanges) throws -> ReminderRecord {
-    try changes.validate()
     let reminder = try reminder(id, writing: true)
     try apply(changes, to: reminder)
     return try save(reminder)
@@ -160,14 +158,15 @@ public final class EventKitReminders: AppleAccess, ReminderAccess {
     let start = try changes.start?.components()
     let effectiveStart =
       changes.clear?.contains(.start) == true ? nil : start ?? reminder.startDateComponents
-    let nativeAlarms = try changes.alarms?.map { try $0.native() } ?? reminder.alarms ?? []
+    let options = try EventOptions(alarms: changes.alarms, recurrence: changes.recurrence)
+    let nativeAlarms = options.alarms ?? reminder.alarms ?? []
     if changes.alarms != nil || changes.start != nil || changes.clear?.contains(.start) == true,
       effectiveStart == nil,
       nativeAlarms.contains(where: { TimeAlarm.supports($0) && $0.absoluteDate == nil })
     {
       throw invalidArguments("Relative alarms require a start date.")
     }
-    try EventOptions.apply(alarms: changes.alarms, recurrence: changes.recurrence, to: reminder)
+    options.apply(to: reminder)
     if let start { reminder.startDateComponents = start }
     if let url = changes.url { reminder.url = URL(string: url) }
     if let location = changes.location { reminder.location = location }

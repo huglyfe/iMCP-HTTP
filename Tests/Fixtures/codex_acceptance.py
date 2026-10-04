@@ -17,7 +17,7 @@ import urllib.request
 root = pathlib.Path(sys.argv[1])
 issuer = sys.argv[2]
 name = "imcp-http-test-" + root.name
-config = 'mcp_servers={"' + name + '"={url="' + issuer + '/mcp",oauth={client_id="codex",callback_url="http://127.0.0.1/callback"}}}'
+config = 'mcp_servers={"' + name + '"={url="' + issuer + '/mcp"}}'
 flags = ["-c", config, "-c", 'mcp_oauth_credentials_store="keyring"']
 proc = subprocess.Popen(["codex", "app-server", "--stdio", *flags], stdin=subprocess.PIPE,
                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1)

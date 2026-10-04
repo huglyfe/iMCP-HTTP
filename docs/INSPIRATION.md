@@ -86,3 +86,13 @@ Owner preference: direct frameworks; defer app automation. No app data, Automati
 | News | [Apple News API](https://developer.apple.com/documentation/applenewsapi) publishes/manages publisher articles; no suitable supported personal-reader integration found. Deferred. |
 
 Performance: use authorization-state snapshots instead of idle polling. Reminders summary snapshots omit alarm/recurrence arrays and unused fields. EventKit still returns the native matching collection; native date predicate narrowing is deferred because query-zone/date-only/floating semantics must not regress merely to reduce RAM.
+
+## Client setup and OAuth cleanup
+
+Reviewed official MCP authorization (2025-11-25), RFC 7591, and RFC 8252 for standard native public-client registration. DCR adds interoperability without remote client-metadata fetching or vendor-specific authentication. Native approval remains the authority. Only local HTTP callbacks are accepted; cloud and remote-editor callbacks remain outside the loopback scope.
+
+Setup recipes reference the official pages linked in `Sources/IMCPHTTP/ClientSetup.swift`: OpenAI MCP and ChatGPT connection docs, Claude Code/Claude connector docs, Cursor MCP, Gemini CLI MCP, OpenCode MCP, VS Code MCP, Windsurf/Devin Desktop MCP, and Zed MCP. Documentation establishes configuration shape, not end-to-end acceptance. No vendor code was copied. The directory keeps those two kinds of evidence distinct.
+
+## Listener lifetime and memory review
+
+Inspected the pinned Hummingbird 2.27.0 `Application` event-loop provider and SwiftNIO 2.103.0 `MultiThreadedEventLoopGroup.withEventLoopGroup` lifecycle API. The default singleton scales its workers with CPU cores. Use one scoped worker for this bounded local listener, with automatic shutdown on return; no new thread-management abstraction or environment setting is needed. Release-mode probes use temporary app state, disabled Apple services, public metadata requests, and process memory metrics. No third-party source was copied.

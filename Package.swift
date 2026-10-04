@@ -13,6 +13,7 @@ let package = Package(
     .package(url: "https://github.com/hummingbird-project/hummingbird.git", exact: "2.27.0"),
     .package(url: "https://github.com/apple/swift-http-types.git", exact: "1.8.0"),
     .package(url: "https://github.com/apple/swift-log.git", exact: "1.15.1"),
+    .package(url: "https://github.com/apple/swift-nio.git", exact: "2.103.0"),
   ],
   targets: [
     .target(
@@ -22,8 +23,10 @@ let package = Package(
         .product(name: "Hummingbird", package: "hummingbird"),
         .product(name: "HTTPTypes", package: "swift-http-types"),
         .product(name: "Logging", package: "swift-log"),
+        .product(name: "NIOPosix", package: "swift-nio"),
       ]),
     .executableTarget(name: "IMCPHTTP", dependencies: ["IMCPCore"]),
+    .testTarget(name: "IMCPHTTPTests", dependencies: ["IMCPHTTP", "IMCPCore"]),
     .testTarget(
       name: "IMCPCoreTests",
       dependencies: ["IMCPCore", .product(name: "SwiftMCP", package: "SwiftMCP")]),

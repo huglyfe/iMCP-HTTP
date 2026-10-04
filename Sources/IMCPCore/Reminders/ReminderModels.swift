@@ -77,11 +77,7 @@ struct ReminderChanges: Codable, Sendable {
   var clear: [ReminderClearField]?
 
   func validate(creating: Bool = false) throws {
-    if let title {
-      guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-        title.utf8.count <= 1024
-      else { throw invalidArguments("Title must be nonempty and at most 1024 UTF-8 bytes.") }
-    }
+    if let title { try validateTitle(title) }
     if creating, title == nil { throw invalidArguments("A title is required on create.") }
     if let notes, notes.utf8.count > 16384 {
       throw invalidArguments("Notes must be at most 16384 UTF-8 bytes.")

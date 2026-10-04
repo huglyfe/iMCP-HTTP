@@ -28,7 +28,7 @@ struct RepeatRule: Codable, Sendable {
   var until: String?
   var count: Int?
 
-  func native() throws -> EKRecurrenceRule {
+  func validate() throws {
     guard (1...1000).contains(interval ?? 1), until == nil || count == nil,
       count.map({ (1...100000).contains($0) }) ?? true
     else { throw invalidArguments("Invalid recurrence interval or end.") }
@@ -58,6 +58,11 @@ struct RepeatRule: Codable, Sendable {
       positions == nil || weekdays != nil || monthDays != nil || months != nil || yearWeeks != nil
         || yearDays != nil
     else { throw invalidArguments("Recurrence selectors do not apply to this frequency.") }
+    if let until { _ = try NativeDates.parse(until) }
+  }
+
+  func native() throws -> EKRecurrenceRule {
+    try validate()
     let end: EKRecurrenceEnd?
     if let until {
       end = EKRecurrenceEnd(end: try NativeDates.parse(until))
@@ -114,15 +119,19 @@ struct TimeAlarm: Codable, Sendable {
   /// Seconds relative to the item's start; negative means before.
   var offsetSeconds: Double?
 
-  func native() throws -> EKAlarm {
+  func validate() throws {
     guard (at == nil) != (offsetSeconds == nil) else {
       throw invalidArguments("An alarm requires either at or offsetSeconds.")
     }
-    if let at { return EKAlarm(absoluteDate: try NativeDates.parse(at)) }
-    guard let offsetSeconds, offsetSeconds.isFinite, abs(offsetSeconds) <= 366 * 86400 else {
+    if let at { _ = try NativeDates.parse(at) }
+    if let offsetSeconds, !offsetSeconds.isFinite || abs(offsetSeconds) > 366 * 86400 {
       throw invalidArguments("Alarm offset must be within one year of the start.")
     }
-    return EKAlarm(relativeOffset: offsetSeconds)
+  }
+  func native() throws -> EKAlarm {
+    try validate()
+    if let at { return EKAlarm(absoluteDate: try NativeDates.parse(at)) }
+    return EKAlarm(relativeOffset: offsetSeconds!)
   }
   static func supports(_ alarm: EKAlarm) -> Bool {
     alarm.structuredLocation == nil && alarm.type == .display
@@ -134,23 +143,29 @@ struct TimeAlarm: Codable, Sendable {
   }
 }
 
-enum EventOptions {
+/// Prepared native values stay within the adapter call. Resolve before any mutation.
+struct EventOptions {
+  let alarms: [EKAlarm]?
+  let recurrence: [EKRecurrenceRule]?
+
+  init(alarms: [TimeAlarm]?, recurrence: [RepeatRule]?) throws {
+    self.alarms = try alarms?.map { try $0.native() }
+    self.recurrence = try recurrence?.map { try $0.native() }
+  }
+
   static func validate(alarms: [TimeAlarm]?, recurrence: [RepeatRule]?) throws {
     guard (alarms?.count ?? 0) <= 8, (recurrence?.count ?? 0) <= 1 else {
       throw invalidArguments("Use at most eight alarms and one recurrence rule.")
     }
-    _ = try alarms?.map { try $0.native() }
-    _ = try recurrence?.map { try $0.native() }
+    for alarm in alarms ?? [] { try alarm.validate() }
+    for rule in recurrence ?? [] { try rule.validate() }
   }
-  static func apply(alarms: [TimeAlarm]?, recurrence: [RepeatRule]?, to item: EKCalendarItem) throws
-  {
-    let nativeAlarms = try alarms?.map { try $0.native() }
-    let rules = try recurrence?.map { try $0.native() }
-    if let nativeAlarms {
+  func apply(to item: EKCalendarItem) {
+    if let alarms {
       // Time edits must not erase geofence, audio, email, or procedure alarms.
-      item.alarms = (item.alarms ?? []).filter { !TimeAlarm.supports($0) } + nativeAlarms
+      item.alarms = (item.alarms ?? []).filter { !TimeAlarm.supports($0) } + alarms
     }
-    if let rules { item.recurrenceRules = rules }
+    if let recurrence { item.recurrenceRules = recurrence }
   }
 }
 

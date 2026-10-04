@@ -13,7 +13,7 @@ struct ToolSettingsTests {
     let url = directory.appendingPathComponent("services.json")
     var settings = try JSONDecoder().decode(
       ServiceSettings.self,
-      from: Data(#"{"remindersEnabled":true}"#.utf8))
+      from: Data(#"{"enabledServices":["reminders"],"disabledTools":[]}"#.utf8))
     check(settings.disabledTools.isEmpty)
     let reminders = FakeReminders()
     let dispatcher = ToolDispatcher(testReminders: reminders)
@@ -49,7 +49,7 @@ struct ToolSettingsTests {
   }
 
   @Test func livePolicyAppliesToEveryAuthorizedClient() async throws {
-    let f = try AuthorizationFixture()
+    let f = try await AuthorizationFixture()
     defer { f.cleanup() }
     let reminders = FakeReminders()
     let dispatcher = ToolDispatcher(testReminders: reminders)

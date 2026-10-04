@@ -11,17 +11,7 @@ public struct ServerConfiguration: Sendable {
   public var issuer: String { "http://127.0.0.1:\(port)" }
   public var resource: String { "\(issuer)/mcp" }
   public static let scope = "apple-services"
-  public static let clientID = "codex"
 
-  /// The public client is not an application identity. Native consent authorizes each grant.
-  func validCallback(_ raw: String) -> Bool {
-    guard let url = URLComponents(string: raw), url.scheme == "http",
-      url.host == "127.0.0.1", let port = url.port, (1024...65535).contains(port),
-      port != self.port, url.path == "/callback", url.user == nil, url.password == nil,
-      url.query == nil, url.fragment == nil
-    else { return false }
-    return raw == "http://127.0.0.1:\(port)/callback"
-  }
 }
 
 public struct AuthorizationViewState: Sendable {
@@ -32,6 +22,7 @@ public struct AuthorizationViewState: Sendable {
 public struct PendingApproval: Identifiable, Sendable {
   public let id: String
   public let clientID: String
+  public let clientName: String
   public let callback: String
   public let expiresAt: Date
 }
@@ -39,6 +30,7 @@ public struct PendingApproval: Identifiable, Sendable {
 public struct ClientGrant: Codable, Identifiable, Sendable {
   public let id: UUID
   public let clientID: String
+  public let clientName: String
   public let createdAt: Date
   public var revoked: Bool
   var accessHash: String
@@ -49,6 +41,7 @@ public struct ClientGrant: Codable, Identifiable, Sendable {
 
 struct AuthorizationRequest: Sendable {
   let clientID: String
+  let clientName: String
   let callback: String
   let state: String
   let challenge: String

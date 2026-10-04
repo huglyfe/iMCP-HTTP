@@ -9,10 +9,7 @@ struct OverviewView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack {
-        VStack(alignment: .leading, spacing: 3) {
-          Text("iMCP-HTTP").font(.headline)
-          Text(runtime.state.title).font(.caption).foregroundStyle(.secondary)
-        }
+        Text("iMCP-HTTP").font(.headline)
         Spacer()
         Toggle(
           "Enable MCP Server",
@@ -23,11 +20,13 @@ struct OverviewView: View {
             })
         )
         .toggleStyle(.switch).labelsHidden()
+        .help(runtime.state.title)
+        .accessibilityValue(runtime.state.title)
         .disabled(runtime.state == .starting || runtime.state == .stopping)
       }
       Divider()
       Text("Services").font(.caption).foregroundStyle(.secondary)
-      ForEach(AppRuntime.services) { service in
+      ForEach(AppleService.allCases) { service in
         ServiceRow(runtime: runtime, service: service)
       }
       if !runtime.approvals.isEmpty {
@@ -41,7 +40,6 @@ struct OverviewView: View {
         Button("Dismiss") { runtime.errorMessage = nil }
       }
       Divider()
-      Button("Copy Codex setup command") { runtime.copyConnectionCommand() }
       Button("Settings…") {
         NSApp.activate(ignoringOtherApps: true)
         openSettings()
@@ -63,10 +61,10 @@ struct ServiceRow: View {
   var body: some View {
     HStack(spacing: 10) {
       Image(systemName: service.icon)
-        .foregroundStyle(runtime.settings[service] ? .white : .secondary)
+        .foregroundStyle(runtime.settings[service] ? .white : service.color)
         .frame(width: 26, height: 26)
         .background(
-          runtime.settings[service] ? Color.accentColor : Color.secondary.opacity(0.12),
+          runtime.settings[service] ? service.color : service.color.opacity(0.12),
           in: Circle())
       Toggle(
         service.title,
@@ -75,6 +73,7 @@ struct ServiceRow: View {
           set: { enabled in Task { await runtime.setEnabled(service, enabled) } })
       )
       .toggleStyle(.switch).controlSize(.small)
+      .tint(service.color)
       .disabled(runtime.changingService != nil || runtime.changingTool != nil)
     }
     .help(runtime.serviceStatus[service] ?? "Disabled")
@@ -89,7 +88,16 @@ extension AppleService {
     case .calendar: "calendar"
     case .contacts: "person.crop.circle"
     case .maps: "map"
-    default: "gearshape"
+    }
+  }
+
+  var color: Color {
+    switch self {
+    case .reminders: .blue
+    case .calendar: .red
+    case .contacts: .orange
+    case .maps: .green
+    case .photos: .purple
     }
   }
 }
@@ -100,10 +108,11 @@ struct ApprovalsView: View {
   var body: some View {
     ForEach(runtime.approvals) { request in
       VStack(alignment: .leading, spacing: 8) {
-        Text("Connection request: \(request.clientID)").font(.headline)
+        Text("Connection request: \(request.clientName)").font(.headline)
         Text("Allow access to enabled tools until revoked?").font(.callout)
-        Text("Approve only a login you just started. Client IDs are unverified labels.")
+        Text("Approve only a login you just started. Client names are unverified labels.")
           .font(.caption).foregroundStyle(.secondary)
+        Text("Client ID: \(request.clientID)").font(.caption.monospaced()).textSelection(.enabled)
         Text(request.callback).font(.caption.monospaced()).textSelection(.enabled)
         HStack {
           Button("Deny", role: .cancel) { Task { await runtime.decide(request, approve: false) } }

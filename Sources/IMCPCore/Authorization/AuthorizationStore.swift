@@ -5,6 +5,8 @@ public actor AuthorizationStore {
   private let persistence: GrantPersistence
   private let now: @Sendable () -> Date
   private var grants: [ClientGrant]
+  private var registrations: [RegisteredClient]
+  private var recentRegistrations: [Date] = []
   private var pending: [String: PendingRequest] = [:]
   private var codes: [String: AuthorizationCode] = [:]
   private var recentRequests: [Date] = []
@@ -20,7 +22,55 @@ public actor AuthorizationStore {
     self.configuration = configuration
     self.now = now
     persistence = GrantPersistence(url: storeURL, issuer: configuration.issuer)
-    grants = try persistence.load()
+    let snapshot = try persistence.load()
+    grants = snapshot.grants
+    registrations = snapshot.registrations
+    guard
+      registrations.allSatisfy({ client in
+        !client.id.isEmpty
+          && client.id.utf8.count <= 128
+          && (try? ClientRegistrationRequest(
+            redirectURIs: client.redirectURIs, clientName: client.name
+          ).validate(configuration: configuration)) != nil
+      })
+    else { throw OAuthFailure("invalid_store") }
+  }
+
+  func register(_ request: ClientRegistrationRequest) throws -> ClientRegistrationResponse {
+    guard accepting else { throw OAuthFailure("temporarily_unavailable") }
+    try request.validate(configuration: configuration)
+    let date = now()
+    recentRegistrations = recentRegistrations.filter { date.timeIntervalSince($0) < 60 }
+    let activeIDs = Set(grants.filter { !$0.revoked }.map(\.clientID))
+    // Keep approved clients indefinitely; discard abandoned registrations after one day.
+    var next = registrations.filter {
+      activeIDs.contains($0.id) || date.timeIntervalSince($0.createdAt) < 86400
+    }
+    guard next.count < 128, recentRegistrations.count < 10 else {
+      throw OAuthFailure("temporarily_unavailable")
+    }
+    let client = RegisteredClient(
+      id: try Credential.make(), name: request.clientName ?? "Local MCP client",
+      redirectURIs: request.redirectURIs, createdAt: date)
+    next.append(client)
+    try persistence.save(grants, registrations: next)
+    registrations = next
+    recentRegistrations.append(date)
+    return ClientRegistrationResponse(
+      clientID: client.id, clientName: client.name, redirectURIs: client.redirectURIs,
+      clientIDIssuedAt: Int(date.timeIntervalSince1970))
+  }
+
+  private func knownClient(_ id: String) -> Bool {
+    registrations.contains { $0.id == id }
+  }
+  private func clientName(_ id: String) -> String {
+    registrations.first { $0.id == id }?.name ?? "Local MCP client"
+  }
+  private func validCallback(_ callback: String, clientID: String) -> Bool {
+    return registrations.first { $0.id == clientID }?.redirectURIs.contains {
+      configuration.matchesCallback(callback, registered: $0)
+    } == true
   }
 
   /// One native UI observer. No timer runs unless a visible approval has an expiry.
@@ -51,7 +101,7 @@ public actor AuthorizationStore {
     pending.compactMap { id, value in
       guard value.callbackURL == nil else { return nil }
       return PendingApproval(
-        id: id, clientID: value.request.clientID,
+        id: id, clientID: value.request.clientID, clientName: value.request.clientName,
         callback: value.request.callback, expiresAt: value.expiresAt)
     }.sorted { $0.expiresAt < $1.expiresAt }
   }
@@ -81,11 +131,11 @@ public actor AuthorizationStore {
   func begin(_ fields: [String: String]) throws -> String {
     prune()
     guard accepting else { throw OAuthFailure("temporarily_unavailable") }
-    guard fields["client_id"] == ServerConfiguration.clientID else {
+    guard let clientID = fields["client_id"], knownClient(clientID) else {
       throw OAuthFailure("unauthorized_client")
     }
     guard fields["response_type"] == "code", let callback = fields["redirect_uri"],
-      configuration.validCallback(callback), let state = fields["state"],
+      validCallback(callback, clientID: clientID), let state = fields["state"],
       !state.isEmpty, state.utf8.count <= 512,
       fields["code_challenge_method"] == "S256",
       let challenge = fields["code_challenge"], challenge.utf8.count == 43,
@@ -102,7 +152,7 @@ public actor AuthorizationStore {
     let id = try Credential.make()
     pending[id] = PendingRequest(
       request: AuthorizationRequest(
-        clientID: ServerConfiguration.clientID,
+        clientID: clientID, clientName: clientName(clientID),
         callback: callback, state: state, challenge: challenge, resource: configuration.resource),
       expiresAt: now().addingTimeInterval(180))
     recentRequests.append(now())
@@ -153,7 +203,7 @@ public actor AuthorizationStore {
   func exchange(_ fields: [String: String]) throws -> TokenResponse {
     prune()
     guard accepting else { throw OAuthFailure("temporarily_unavailable") }
-    guard fields["client_id"] == ServerConfiguration.clientID else {
+    guard let clientID = fields["client_id"], knownClient(clientID) else {
       throw OAuthFailure("invalid_client")
     }
     guard fields["resource"] == configuration.resource else { throw OAuthFailure("invalid_target") }
@@ -177,7 +227,8 @@ public actor AuthorizationStore {
     else { throw OAuthFailure("invalid_grant") }
     let tokens = try makeTokens()
     let grant = ClientGrant(
-      id: UUID(), clientID: code.request.clientID, createdAt: now(),
+      id: UUID(), clientID: code.request.clientID, clientName: code.request.clientName,
+      createdAt: now(),
       revoked: false, accessHash: Credential.hash(tokens.accessToken),
       accessExpiresAt: now().addingTimeInterval(900),
       refreshHash: Credential.hash(tokens.refreshToken), usedRefreshHashes: [])
@@ -190,14 +241,19 @@ public actor AuthorizationStore {
   private func refresh(_ fields: [String: String]) throws -> TokenResponse {
     guard let token = fields["refresh_token"] else { throw OAuthFailure("invalid_grant") }
     let hash = Credential.hash(token)
-    if let index = grants.firstIndex(where: { !$0.revoked && $0.usedRefreshHashes.contains(hash) })
-    {
+    if let index = grants.firstIndex(where: {
+      !$0.revoked && $0.clientID == fields["client_id"] && $0.usedRefreshHashes.contains(hash)
+    }) {
       var next = grants
       next[index].revoked = true
       try persist(next)
       throw OAuthFailure("invalid_grant")
     }
-    guard let index = grants.firstIndex(where: { !$0.revoked && $0.refreshHash == hash }) else {
+    guard
+      let index = grants.firstIndex(where: {
+        !$0.revoked && $0.clientID == fields["client_id"] && $0.refreshHash == hash
+      })
+    else {
       throw OAuthFailure("invalid_grant")
     }
     let tokens = try makeTokens()
@@ -250,7 +306,7 @@ public actor AuthorizationStore {
     try TokenResponse(accessToken: Credential.make(), refreshToken: Credential.make())
   }
   private func persist(_ next: [ClientGrant]) throws {
-    try persistence.save(next)
+    try persistence.save(next, registrations: registrations)
     grants = next
     publish()
   }

@@ -2,52 +2,18 @@ import Darwin
 import Foundation
 
 public struct ServiceSettings: Codable, Sendable {
-  public var remindersEnabled: Bool
-  public var calendarEnabled: Bool
-  public var contactsEnabled: Bool
-  public var photosEnabled: Bool
+  public var enabledServices: Set<AppleService>
   public var disabledTools: Set<String>
-  public var mapsEnabled: Bool
-  public init(
-    remindersEnabled: Bool = false, calendarEnabled: Bool = false, contactsEnabled: Bool = false,
-    mapsEnabled: Bool = false, photosEnabled: Bool = false, disabledTools: Set<String> = []
-  ) {
-    self.remindersEnabled = remindersEnabled
-    self.calendarEnabled = calendarEnabled
-    self.contactsEnabled = contactsEnabled
-    self.mapsEnabled = mapsEnabled
-    self.photosEnabled = photosEnabled
+
+  public init(enabledServices: Set<AppleService> = [], disabledTools: Set<String> = []) {
+    self.enabledServices = enabledServices
     self.disabledTools = disabledTools
   }
-  public init(from decoder: Decoder) throws {
-    let values = try decoder.container(keyedBy: CodingKeys.self)
-    photosEnabled = try values.decodeIfPresent(Bool.self, forKey: .photosEnabled) ?? false
-    disabledTools = try values.decodeIfPresent(Set<String>.self, forKey: .disabledTools) ?? []
-    remindersEnabled = try values.decodeIfPresent(Bool.self, forKey: .remindersEnabled) ?? false
-    calendarEnabled = try values.decodeIfPresent(Bool.self, forKey: .calendarEnabled) ?? false
-    contactsEnabled = try values.decodeIfPresent(Bool.self, forKey: .contactsEnabled) ?? false
-    mapsEnabled = try values.decodeIfPresent(Bool.self, forKey: .mapsEnabled) ?? false
-  }
+
   public subscript(service: AppleService) -> Bool {
-    get {
-      switch service {
-      case .photos: photosEnabled
-      case .reminders: remindersEnabled
-      case .calendar: calendarEnabled
-      case .contacts: contactsEnabled
-      case .maps: mapsEnabled
-      default: false
-      }
-    }
+    get { enabledServices.contains(service) }
     set {
-      switch service {
-      case .photos: photosEnabled = newValue
-      case .reminders: remindersEnabled = newValue
-      case .calendar: calendarEnabled = newValue
-      case .contacts: contactsEnabled = newValue
-      case .maps: mapsEnabled = newValue
-      default: break
-      }
+      if newValue { enabledServices.insert(service) } else { enabledServices.remove(service) }
     }
   }
   public static func load(from url: URL) throws -> ServiceSettings {

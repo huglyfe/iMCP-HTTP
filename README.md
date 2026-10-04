@@ -2,16 +2,18 @@
 
 A native Mac app that gives approved AI clients access to Apple services over MCP Streamable HTTP. One process, an iMCP-style menu-bar panel, and Settings. No Dock icon or main window.
 
-**Development implementation:** loopback HTTP, native OAuth approval, durable client grants, pause/revoke, and native Reminders, Calendar, Contacts, Maps, and read-only Photos metadata tools. Real Codex login, fixture tool calls, restart, and revocation are tested. Native UI, macOS permission prompts, and real disposable Apple-service writes still need manual acceptance. This repository remains private.
+**Development implementation:** loopback HTTP, native OAuth approval, durable client grants, pause/revoke, and native Reminders, Calendar, Contacts, Maps, and read-only Photos metadata tools. Real Codex login, fixture tool calls, restart, and revocation are tested. OpenCode dynamic registration and OAuth login are also tested. Native UI, macOS permission prompts, and real disposable Apple-service writes still need manual acceptance. This repository remains private.
 
 ## Develop
 
-Requires macOS 15+ and Swift 6.2+ with Swift Testing and `swift format` (current full Xcode recommended).
+Requires macOS 15+ and Swift 6.2+ with Swift Testing and `swift format` (full Xcode required with SDKs that ship SwiftUI macros).
 
 ```sh
 ./scripts/check.sh
 open dist/iMCP-HTTP.app
 ```
+
+If Command Line Tools are selected, run checks with `DEVELOPER_DIR` pointing to the installed full Xcode developer directory. This selects the toolchain for that command without changing the system setting.
 
 Use `./scripts/build-app.sh release` for an optimized development bundle. Bundles are ad-hoc signed, unsandboxed development apps under ignored `dist/`, not notarized releases. Apple data access remains governed by macOS permission and the app's service switch. Production signing and permission persistence across upgrades are release gates.
 
@@ -20,11 +22,13 @@ Use `./scripts/build-app.sh release` for an optimized development bundle. Bundle
 Start the app, then:
 
 ```sh
-codex mcp add imcp-http --url http://127.0.0.1:18765/mcp --oauth-client-id codex
+codex mcp add imcp-http --url http://127.0.0.1:18765/mcp
 codex mcp login imcp-http
 ```
 
-Approve the pending request in the app. The registered public client ID is `codex`; the stable callback is `http://127.0.0.1/callback` with a client-selected ephemeral port. Current Codex defaults to this callback. Native approval is required for each new grant; the client ID alone proves no identity.
+Approve the pending request from the menu-bar icon. Clients register automatically using standard OAuth Dynamic Client Registration, then use PKCE and native approval. No client secret or manual token is needed. Names identify requests for display only; approve a login you initiated.
+
+Settings → Setup has a searchable alphabetical directory for ChatGPT, Claude Code, Claude Desktop, Codex, Cursor, Gemini CLI, OpenCode, VS Code, Windsurf, and Zed. Each entry includes vendor documentation and verification status. Local-client recipes use the current endpoint; hosted connector entries explain why they cannot reach this Mac directly. No client configuration or tunnel is installed automatically.
 
 Approval lasts until revoked. Tokens expire after 15 minutes and refresh without a new approval. The server switch pauses access; closing the menu panel or Settings keeps the app running. Revoke prevents subsequent calls and refresh. Existing calls may already have completed.
 
@@ -61,19 +65,19 @@ Example arguments:
 {"accountID":"<contacts-account-id>","search":"Alex","limit":10}
 ```
 
-See [tool contracts](docs/REQUIREMENTS.md#common-tool-contract) for fields, dates, recurrence, clearing, pagination, and native limitations. Version 0.4.0 changes unreleased schemas/results; reconnect development clients. Location, Shortcuts, Weather, Messages/Phone, and Capture remain future slices; the [prior-art review](docs/INSPIRATION.md#coverage-and-remaining-boundaries) records their API/permission constraints.
+See [tool contracts](docs/REQUIREMENTS.md#common-tool-contract) for fields, dates, recurrence, clearing, pagination, and native limitations. This development revision uses one current settings and grant-store format; no legacy migration is provided. Location, Shortcuts, Weather, Messages/Phone, and Capture remain future slices; the [prior-art review](docs/INSPIRATION.md#coverage-and-remaining-boundaries) records their API/permission constraints.
 
 ## Verification
 
 The canonical check runs fixture tests, a real HTTP listener test, formatting, build, bundle metadata/signature, and whitespace checks. Automated tests never read or write real Apple records or call live Maps.
 
-Optional real Codex acceptance requires `codex` and `python3` on PATH and access to the local keyring:
+Optional real-client acceptance requires `codex`, `opencode`, and `python3` on PATH and access to the local keyring:
 
 ```sh
-IMCP_RUN_CODEX_ACCEPTANCE=1 ./scripts/check.sh
+IMCP_RUN_CLIENT_ACCEPTANCE=1 ./scripts/check.sh
 ```
 
-It uses isolated temporary state, a unique test credential, and an ephemeral Codex session with no model turns. It approves through the native decision API, tests OAuth, typed Reminders/Calendar/Contacts/Maps tools against fake data, restart, and revocation, then logs out the test credential. It does not verify clicking the native UI or alter production Codex configuration. Listener tests use ports 19765 and 19767.
+The fixtures use standard dynamic registration, isolated temporary state, and the native decision API, with no model turns or production client configuration changes. Codex tests all five services against fake data, restart, and revocation, then logs out its unique test credential. OpenCode tests registration/login and verifies that the server saved the resulting grant. OpenCode tool/restart/revoke acceptance remains unverified: its status command alone does not prove fresh authorized access. These tests do not verify native clicks. Listener tests use ports 19765 and 19767.
 
 For isolated manual acceptance, launch the bundle executable with `IMCP_HTTP_DATA_DIR` set to a temporary directory and `IMCP_HTTP_PORT` set to another loopback port. Keep these development overrides out of production launch configuration.
 

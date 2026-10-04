@@ -108,7 +108,6 @@ public final class NativeContacts: AppleAccess, ContactAccess {
   func get(id: String) throws -> ContactRecord { Self.record(try contact(id)) }
   func create(accountID: String, changes: ContactChanges) throws -> ContactRecord {
     try requireAccess()
-    try changes.validate(creating: true)
     try requireAccount(accountID)
     let contact = CNMutableContact()
     Self.apply(changes, to: contact)
@@ -118,7 +117,6 @@ public final class NativeContacts: AppleAccess, ContactAccess {
     return Self.record(contact)
   }
   func edit(id: String, changes: ContactChanges) throws -> ContactRecord {
-    try changes.validate()
     let contact = try contact(id).mutableCopy() as! CNMutableContact
     Self.apply(changes, to: contact)
     let request = CNSaveRequest()

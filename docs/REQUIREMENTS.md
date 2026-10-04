@@ -4,10 +4,11 @@ These are product contracts. Current implementation and verification limits are 
 
 ## OAuth and owner approval
 
-- Standard MCP-compatible OAuth authorization code + PKCE S256. No custom client software or repeated manual token pasting in the intended experience.
+- Standard MCP-compatible OAuth authorization code + PKCE S256, with RFC 7591 dynamic registration for public local clients. No custom client software or repeated manual token pasting in the intended experience.
 - Authenticate the owner's decision through the native app, bound to one pending authorization request. A browser page or client-supplied name alone cannot approve itself.
 - Keep the first UI minimal: client label, explanation of account-wide enabled access, Approve, Deny. Show the client identifier/details when needed to distinguish requests.
 - The grant persists until explicitly revoked. Store a distinct grant per authorized connection; do not use one shared owner API key.
+- Registration accepts only bounded local callback metadata, creates no approval or grant, and uses the same atomic store as grants. Bound registration rate and count; unused registrations may be pruned, while active grants keep their client registration. No client-specific authentication branches or legacy store migration.
 - Pending requests and codes expire; codes are single-use, bound to client, callback, resource, and PKCE challenge. Bound pending requests and attempts to prevent unbounded approval prompts.
 - Serve protected-resource and authorization-server metadata appropriate to the negotiated MCP/OAuth profile. Use a stable issuer/resource and strict registered callback validation, including standard loopback-port rules.
 - Validate issuer, resource/audience, credential expiry, grant revocation, and scope on every applicable exchange/request. Use one account-access scope initially if needed by the protocol; no granular permission editor.
@@ -19,6 +20,7 @@ These are product contracts. Current implementation and verification limits are 
 ## Native interface
 
 - iMCP-style menu-bar-only accessory app: no Dock icon or main application window. A compact panel holds server/service controls; Settings may open on demand.
+- The menu panel omits the setup-command button and app-name subtitle. Distinct service colors apply consistently in the panel and Settings. Setup contains an alphabetical, searchable client directory with instructions, copyable configuration, vendor links, and honest compatibility labels. Hosted clients that cannot reach loopback have explanatory entries rather than nonfunctional setup commands.
 - Settings exposes individual tools within each service, client approval/revocation, and connection setup. Tool choices are global across all approved clients and available accounts, not client-specific permissions.
 - Disabled tools are omitted from discovery and rejected on subsequent calls by name, including stale client discovery. Persist choices across restart; turning a service off still blocks every tool in it.
 - Start the server at app launch independently of menu-panel presentation. Dismissing panels/Settings leaves it running; Quit stops it. Keep one process, lazy native stores, and measure idle memory before claiming RAM improvements.

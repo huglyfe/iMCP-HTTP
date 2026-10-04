@@ -7,7 +7,7 @@ struct SettingsView: View {
   var body: some View {
     TabView {
       Form {
-        ForEach(AppRuntime.services) { service in
+        ForEach(AppleService.allCases) { service in
           Section {
             ForEach(runtime.tools.filter { $0.service == service }) { tool in
               Toggle(
@@ -29,6 +29,7 @@ struct SettingsView: View {
                 }
               }
               .toggleStyle(.switch).controlSize(.small)
+              .tint(service.color)
               .disabled(
                 !runtime.settings[service] || runtime.changingService != nil
                   || runtime.changingTool != nil)
@@ -57,7 +58,7 @@ struct SettingsView: View {
           ForEach(runtime.clients) { client in
             HStack {
               VStack(alignment: .leading, spacing: 3) {
-                Text(client.clientID).font(.headline)
+                Text(client.clientName).font(.headline)
                 Text(client.createdAt, style: .date).font(.caption)
                 Text(String(client.id.uuidString.prefix(8))).font(.caption.monospaced())
               }
@@ -73,19 +74,7 @@ struct SettingsView: View {
       }
       .tabItem { Label("Connections", systemImage: "person.2") }
 
-      VStack(alignment: .leading, spacing: 14) {
-        Text("Connect Codex").font(.headline)
-        Text(runtime.configuration.resource).font(.callout.monospaced()).textSelection(.enabled)
-        Text("Add the server once:")
-        Text(runtime.connectionCommand).font(.callout.monospaced()).textSelection(.enabled)
-        Button("Copy setup command") { runtime.copyConnectionCommand() }
-        Text("Then run:")
-        Text("codex mcp login imcp-http").font(.callout.monospaced()).textSelection(.enabled)
-        Text(
-          "Approve the request from the menu-bar icon. Enable services and individual tools in Services."
-        )
-        Spacer()
-      }.padding(20)
+      SetupView(resource: runtime.configuration.resource)
         .tabItem { Label("Setup", systemImage: "link") }
     }
     .padding(8)

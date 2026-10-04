@@ -3,11 +3,23 @@ import Testing
 
 @testable import IMCPCore
 
-struct CodexAcceptanceTests {
+@Suite(.serialized)
+struct ClientAcceptanceTests {
   @Test(
-    .enabled(if: ProcessInfo.processInfo.environment["IMCP_RUN_CODEX_ACCEPTANCE"] == "1"),
+    .enabled(if: ProcessInfo.processInfo.environment["IMCP_RUN_CLIENT_ACCEPTANCE"] == "1"),
     .timeLimit(.minutes(3)))
-  func realCodexLoginRestartAndRevoke() async throws {
+  func realCodexLoginToolsRestartAndRevoke() async throws {
+    try await runClient("codex")
+  }
+
+  @Test(
+    .enabled(if: ProcessInfo.processInfo.environment["IMCP_RUN_CLIENT_ACCEPTANCE"] == "1"),
+    .timeLimit(.minutes(3)))
+  func realOpenCodeRegistrationAndLogin() async throws {
+    try await runClient("opencode")
+  }
+
+  private func runClient(_ client: String) async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
@@ -43,7 +55,7 @@ struct CodexAcceptanceTests {
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
     let script = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("Fixtures/codex_acceptance.py")
+      .appendingPathComponent("Fixtures/\(client)_acceptance.py")
     process.arguments = ["python3", script.path, root.path, configuration.issuer]
     process.standardOutput = FileHandle.standardOutput
     process.standardError = FileHandle.standardError
@@ -77,7 +89,14 @@ struct CodexAcceptanceTests {
     if process.isRunning { process.terminate() }
     process.waitUntilExit()
     check(process.terminationStatus == 0)
-    check(FileManager.default.fileExists(atPath: root.appendingPathComponent("revoke-done").path))
+    if client == "codex" {
+      check(FileManager.default.fileExists(atPath: root.appendingPathComponent("revoke-done").path))
+    } else {
+      // A successful client exit alone isn't proof that the token exchange completed.
+      check(await authorization.clients().count == 1)
+      let restored = try AuthorizationStore(configuration: configuration, storeURL: url)
+      check(await restored.clients().count == 1)
+    }
     server.cancel()
     _ = try? await server.value
   }

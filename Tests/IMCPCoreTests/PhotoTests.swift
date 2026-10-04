@@ -6,7 +6,7 @@ import Testing
 
 struct PhotoTests {
   @Test func photoQueriesValidateBeforeAdapterAccess() async throws {
-    let photos = await FakePhotos()
+    let photos = FakePhotos()
     let dispatcher = ToolDispatcher(modules: [PhotoTools(access: photos)])
     check(await dispatcher.tools().map(\.name).contains("photos_fetch"))
     for query: JSONDictionary in [
@@ -31,15 +31,16 @@ struct PhotoTests {
     check(await photos.calls == 1)
   }
 
-  @Test func photosStayDisabledOnUpgradeAndNativeDisabledReadsFail() async throws {
+  @Test func photosStayDisabledUntilSelectedAndNativeDisabledReadsFail() async throws {
     let old = try JSONDecoder().decode(
-      ServiceSettings.self, from: Data(#"{"remindersEnabled":true}"#.utf8))
-    check(!old.photosEnabled)
+      ServiceSettings.self,
+      from: Data(#"{"enabledServices":["reminders"],"disabledTools":[]}"#.utf8))
+    check(!old[.photos])
     var updated = old
     updated[.photos] = true
     let restored = try JSONDecoder().decode(
       ServiceSettings.self, from: JSONEncoder().encode(updated))
-    check(restored.photosEnabled && restored.remindersEnabled)
+    check(restored[.photos] && restored[.reminders])
     // Disabled calls must fail before any native PhotoKit library fetch or permission prompt.
     let native = await NativePhotos()
     await expectFailure { try await native.albums(offset: 0, limit: 1) }

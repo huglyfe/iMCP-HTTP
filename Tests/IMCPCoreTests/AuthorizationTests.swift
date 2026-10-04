@@ -7,17 +7,23 @@ struct AuthorizationFixture {
   let directory: URL
   let configuration = ServerConfiguration(port: 19765)
   let store: AuthorizationStore
+  let clientID: String
   let verifier = String(repeating: "a", count: 64)
 
-  init() throws {
+  init() async throws {
     directory = FileManager.default.temporaryDirectory.appendingPathComponent("imcp-test-\(UUID())")
     store = try AuthorizationStore(
       configuration: configuration, storeURL: directory.appendingPathComponent("grants.json"))
+    clientID = try await store.register(
+      ClientRegistrationRequest(
+        redirectURIs: ["http://127.0.0.1:49152/callback"], clientName: "Fixture client",
+        tokenEndpointAuthMethod: "none")
+    ).clientID
   }
   func cleanup() { try? FileManager.default.removeItem(at: directory) }
   func fields() throws -> [String: String] {
     [
-      "client_id": "codex", "response_type": "code",
+      "client_id": clientID, "response_type": "code",
       "redirect_uri": "http://127.0.0.1:49152/callback",
       "state": "test-state", "code_challenge_method": "S256",
       "code_challenge": try PKCE.makeChallenge(from: verifier),
@@ -34,7 +40,7 @@ struct AuthorizationFixture {
   }
   func exchangeFields(_ code: String) -> [String: String] {
     [
-      "grant_type": "authorization_code", "client_id": "codex", "code": code,
+      "grant_type": "authorization_code", "client_id": clientID, "code": code,
       "redirect_uri": "http://127.0.0.1:49152/callback", "code_verifier": verifier,
       "resource": configuration.resource,
     ]
@@ -44,7 +50,7 @@ struct AuthorizationFixture {
 
 struct AuthorizationTests {
   @Test func approveRestartRefreshRevoke() async throws {
-    let f = try AuthorizationFixture()
+    let f = try await AuthorizationFixture()
     defer { f.cleanup() }
     let tokens = try await f.tokens()
     let grant = try await f.store.authenticate("Bearer \(tokens.accessToken)")
@@ -59,7 +65,7 @@ struct AuthorizationTests {
       configuration: f.configuration, storeURL: f.directory.appendingPathComponent("grants.json"))
     check(try await reopened.authenticate("Bearer \(tokens.accessToken)") == grant)
     let rotated = try await reopened.exchange([
-      "grant_type": "refresh_token", "client_id": "codex",
+      "grant_type": "refresh_token", "client_id": f.clientID,
       "resource": f.configuration.resource, "refresh_token": tokens.refreshToken,
     ])
     check(try await reopened.authenticate("Bearer \(rotated.accessToken)") == grant)
@@ -70,14 +76,14 @@ struct AuthorizationTests {
       configuration: f.configuration, storeURL: f.directory.appendingPathComponent("grants.json"))
     await expectFailure {
       try await again.exchange([
-        "grant_type": "refresh_token", "client_id": "codex",
+        "grant_type": "refresh_token", "client_id": f.clientID,
         "resource": f.configuration.resource, "refresh_token": rotated.refreshToken,
       ])
     }
   }
 
   @Test func codesAreBoundAndSingleUse() async throws {
-    let f = try AuthorizationFixture()
+    let f = try await AuthorizationFixture()
     defer { f.cleanup() }
     for field in ["code_verifier", "redirect_uri", "resource", "client_id"] {
       let code = try await f.code()
@@ -91,7 +97,7 @@ struct AuthorizationTests {
   }
 
   @Test func denialAndCallbackValidation() async throws {
-    let f = try AuthorizationFixture()
+    let f = try await AuthorizationFixture()
     defer { f.cleanup() }
     for callback in [
       "http://localhost:49152/callback", "http://127.0.0.1:49152/other",
@@ -112,11 +118,11 @@ struct AuthorizationTests {
   }
 
   @Test func refreshReplayRevokesFamilyAndPauseRejects() async throws {
-    let f = try AuthorizationFixture()
+    let f = try await AuthorizationFixture()
     defer { f.cleanup() }
     let tokens = try await f.tokens()
     let fields = [
-      "grant_type": "refresh_token", "client_id": "codex",
+      "grant_type": "refresh_token", "client_id": f.clientID,
       "resource": f.configuration.resource, "refresh_token": tokens.refreshToken,
     ]
     let rotated = try await f.store.exchange(fields)
@@ -131,7 +137,7 @@ struct AuthorizationTests {
   }
 
   @Test func pendingRequestsAreBoundedAndNotRecovered() async throws {
-    let f = try AuthorizationFixture()
+    let f = try await AuthorizationFixture()
     defer { f.cleanup() }
     for _ in 0..<8 { _ = try await f.store.begin(f.fields()) }
     await expectFailure { try await f.store.begin(f.fields()) }
@@ -141,7 +147,7 @@ struct AuthorizationTests {
   }
 
   @Test func expirationsAndFailedPersistenceFailClosed() async throws {
-    let f = try AuthorizationFixture()
+    let f = try await AuthorizationFixture()
     defer { f.cleanup() }
     let tokens = try await f.tokens()
     let future = Date().addingTimeInterval(901)
@@ -150,24 +156,25 @@ struct AuthorizationTests {
       storeURL: f.directory.appendingPathComponent("grants.json"), now: { future })
     await expectFailure { try await expired.authenticate("Bearer \(tokens.accessToken)") }
     let refreshed = try await expired.exchange([
-      "grant_type": "refresh_token", "client_id": "codex",
+      "grant_type": "refresh_token", "client_id": f.clientID,
       "resource": f.configuration.resource, "refresh_token": tokens.refreshToken,
     ])
     _ = try await expired.authenticate("Bearer \(refreshed.accessToken)")
-    let badPath = f.directory.appendingPathComponent("not-a-directory")
-    try Data().write(to: badPath)
-    let bad = try AuthorizationStore(
-      configuration: f.configuration,
-      storeURL: badPath.appendingPathComponent("grants.json"))
-    let id = try await bad.begin(f.fields())
-    try await bad.decide(id: id, approve: true)
-    let callback = try require(await bad.callback(for: id))
+    let id = try await f.store.begin(f.fields())
+    try await f.store.decide(id: id, approve: true)
+    let callback = try require(await f.store.callback(for: id))
     let code = try require(
-      URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems?.first(where: {
+      URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems?.first {
         $0.name == "code"
-      })?.value)
-    await expectFailure { try await bad.exchange(f.exchangeFields(code)) }
-    check(await bad.clients().isEmpty)
+      }?.value)
+    // Make atomic replacement fail after registration and approval have succeeded.
+    let storeURL = f.directory.appendingPathComponent("grants.json")
+    try FileManager.default.removeItem(at: storeURL)
+    try FileManager.default.createDirectory(at: storeURL, withIntermediateDirectories: false)
+    let before = await f.store.clients().count
+    await expectFailure { try await f.store.exchange(f.exchangeFields(code)) }
+    check(await f.store.clients().count == before)
+
   }
 
 }

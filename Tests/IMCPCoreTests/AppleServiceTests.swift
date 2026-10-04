@@ -72,6 +72,24 @@ struct AppleServiceTests {
     }
   }
 
+  @Test func preparedEventOptionsPreserveUnrelatedAlarms() throws {
+    // EventKit requires a store to construct a reminder. Never request access,
+    // fetch records, or save this disposable in-memory value.
+    let locationAlarm = EKAlarm()
+    locationAlarm.structuredLocation = EKStructuredLocation(title: "Fixture")
+    let reminder = EKReminder(eventStore: EKEventStore())
+    reminder.alarms = [locationAlarm, EKAlarm(relativeOffset: -60)]
+    let options = try EventOptions(
+      alarms: [try decode(TimeAlarm.self, #"{"offsetSeconds":-900}"#)], recurrence: nil)
+    options.apply(to: reminder)
+    check(reminder.alarms?.count == 2)
+    check(reminder.alarms?.contains(where: { $0.structuredLocation != nil }) == true)
+    check(reminder.alarms?.contains(where: { $0.relativeOffset == -900 }) == true)
+    try EventOptions(alarms: [], recurrence: nil).apply(to: reminder)
+    check(reminder.alarms?.count == 1)
+    check(reminder.alarms?.first?.structuredLocation != nil)
+  }
+
   @Test @MainActor func contactPatchesPreserveUnrelatedFields() throws {
     // An unsaved value object; no CNContactStore is constructed or queried.
     let contact = CNMutableContact()
@@ -124,15 +142,16 @@ struct AppleServiceTests {
     await expectFailure { try await contacts.groups(accountID: "fixture") }
   }
 
-  @Test func newSettingsStayDisabledAfterUpgrade() throws {
-    var settings = try decode(ServiceSettings.self, #"{"remindersEnabled":true}"#)
+  @Test func unselectedServicesStayDisabledAfterReload() throws {
+    var settings = try decode(
+      ServiceSettings.self, #"{"enabledServices":["reminders"],"disabledTools":[]}"#)
     check(
-      settings.remindersEnabled && !settings.calendarEnabled && !settings.contactsEnabled
-        && !settings.mapsEnabled)
+      settings[.reminders] && !settings[.calendar] && !settings[.contacts]
+        && !settings[.maps])
     settings[.contacts] = true
     let restored = try JSONDecoder().decode(
       ServiceSettings.self, from: JSONEncoder().encode(settings))
-    check(restored.remindersEnabled && restored.contactsEnabled && !restored.calendarEnabled)
+    check(restored[.reminders] && restored[.contacts] && !restored[.calendar])
   }
 
   @Test func calendarAndContactsValidateBeforeDispatch() async throws {

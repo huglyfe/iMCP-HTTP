@@ -14,11 +14,11 @@ struct AppStateTests {
       Issue.record("Two app instances must not own one store")
     } catch {}
     let settings = directory.appendingPathComponent("services.json")
-    check(try !ServiceSettings.load(from: settings).remindersEnabled)
-    try ServiceSettings(remindersEnabled: true).save(to: settings)
-    check(try ServiceSettings.load(from: settings).remindersEnabled)
-    try ServiceSettings(remindersEnabled: false).save(to: settings)
-    check(try !ServiceSettings.load(from: settings).remindersEnabled)
+    check(try !ServiceSettings.load(from: settings)[.reminders])
+    try ServiceSettings(enabledServices: [.reminders]).save(to: settings)
+    check(try ServiceSettings.load(from: settings)[.reminders])
+    try ServiceSettings().save(to: settings)
+    check(try !ServiceSettings.load(from: settings)[.reminders])
     owner = nil
     _ = try StateDirectoryLock(directory: directory)
   }

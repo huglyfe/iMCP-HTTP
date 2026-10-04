@@ -82,14 +82,12 @@ public final class EventKitCalendar: AppleAccess, CalendarAccess {
   }
   func create(calendarID: String, changes: EventChanges) throws -> EventRecord {
     try requireAccess()
-    try changes.validate(creating: true)
     let event = EKEvent(eventStore: store)
     event.calendar = try catalog.get(calendarID, writing: true)
     try apply(changes, to: event)
     return try save(event, span: .thisEvent)
   }
   func edit(id: String, start: Date, span: EventSpan, changes: EventChanges) throws -> EventRecord {
-    try changes.validate()
     let event = try event(id: id, start: start, writing: true)
     if changes.recurrence != nil, event.hasRecurrenceRules, span == .thisEvent {
       throw invalidArguments("Changing a repeating schedule requires futureEvents scope.")
@@ -127,7 +125,8 @@ public final class EventKitCalendar: AppleAccess, CalendarAccess {
   private func apply(_ changes: EventChanges, to event: EKEvent) throws {
     let start = try changes.start.map(NativeDates.parse)
     let end = try changes.end.map(NativeDates.parse)
-    try EventOptions.apply(alarms: changes.alarms, recurrence: changes.recurrence, to: event)
+    let options = try EventOptions(alarms: changes.alarms, recurrence: changes.recurrence)
+    options.apply(to: event)
     if let title = changes.title { event.title = title }
     if let timeZone = changes.timeZone { event.timeZone = TimeZone(identifier: timeZone) }
     if let allDay = changes.allDay { event.isAllDay = allDay }

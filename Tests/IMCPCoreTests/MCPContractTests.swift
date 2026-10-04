@@ -7,7 +7,7 @@ import Testing
 
 struct MCPContractTests {
   @Test func protocolVersionControlsResultsAndSchemas() async throws {
-    let f = try AuthorizationFixture()
+    let f = try await AuthorizationFixture()
     defer { f.cleanup() }
     let tokens = try await f.tokens()
     let grant = try await f.store.authenticate("Bearer \(tokens.accessToken)")

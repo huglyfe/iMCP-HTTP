@@ -5,7 +5,7 @@ import Testing
 
 struct RuntimeUpdateTests {
   @Test func authorizationPublishesOwnerStateChangesWithoutPolling() async throws {
-    let f = try AuthorizationFixture()
+    let f = try await AuthorizationFixture()
     defer { f.cleanup() }
     var updates = await f.store.updates().makeAsyncIterator()
     let initial = try require(await updates.next())
@@ -32,7 +32,7 @@ struct RuntimeUpdateTests {
   }
 
   @Test func replacingTheUIObserverFinishesThePreviousStream() async throws {
-    let f = try AuthorizationFixture()
+    let f = try await AuthorizationFixture()
     defer { f.cleanup() }
     var old = await f.store.updates().makeAsyncIterator()
     _ = await old.next()

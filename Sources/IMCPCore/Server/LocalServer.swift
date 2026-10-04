@@ -2,6 +2,7 @@ import Foundation
 import HTTPTypes
 import Hummingbird
 import Logging
+import NIOPosix
 
 public struct LocalServer: Sendable {
   public let configuration: ServerConfiguration
@@ -20,22 +21,28 @@ public struct LocalServer: Sendable {
   public func run(onReady: @escaping @Sendable () async -> Void = {}) async throws {
     // No request/access logger: authorization URLs and Apple content must stay out of logs.
     let logger = Logger(label: "imcp-http", factory: { _ in SwiftLogNoOpLogHandler() })
-    let app = Application(
-      responder: LocalResponder(
-        configuration: configuration,
-        authorization: authorization,
-        gateway: MCPGateway(authorization: authorization, dispatcher: dispatcher)),
-      server: .http1(
+    // One event loop serves this bounded local listener. Release it on pause/failure
+    // instead of creating a process-wide worker for every CPU core.
+    try await MultiThreadedEventLoopGroup.withEventLoopGroup(numberOfThreads: 1) { group in
+      let app = Application(
+        responder: LocalResponder(
+          configuration: configuration,
+          authorization: authorization,
+          gateway: MCPGateway(authorization: authorization, dispatcher: dispatcher)),
+        server: .http1(
+          configuration: .init(
+            idleTimeout: .seconds(10),
+            httpDecoderConfiguration: .init(
+              maxHeaderFieldSize: 8192, maxHeaderListSize: 16384, maxHeaderFieldCount: 64))),
         configuration: .init(
-          idleTimeout: .seconds(10),
-          httpDecoderConfiguration: .init(
-            maxHeaderFieldSize: 8192, maxHeaderListSize: 16384, maxHeaderFieldCount: 64))),
-      configuration: .init(
-        address: .hostname("127.0.0.1", port: configuration.port),
-        backlog: 32, reuseAddress: true, availableConnectionsDelegate: .maximum(32, logger: logger)
-      ),
-      onServerRunning: { _ in await onReady() }, logger: logger)
-    try await app.run()
+          address: .hostname("127.0.0.1", port: configuration.port),
+          backlog: 32, reuseAddress: true,
+          availableConnectionsDelegate: .maximum(32, logger: logger)
+        ),
+        onServerRunning: { _ in await onReady() }, eventLoopGroupProvider: .shared(group),
+        logger: logger)
+      try await app.run()
+    }
   }
 }
 
@@ -84,6 +91,7 @@ struct LocalResponder: HTTPResponder {
         "issuer": configuration.issuer,
         "authorization_endpoint": "\(configuration.issuer)/authorize",
         "token_endpoint": "\(configuration.issuer)/token",
+        "registration_endpoint": "\(configuration.issuer)/register",
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
@@ -91,6 +99,19 @@ struct LocalResponder: HTTPResponder {
         "scopes_supported": [ServerConfiguration.scope],
         "authorization_response_iss_parameter_supported": true,
       ])
+    case (.post, "/register"):
+      guard request.headers[.contentType]?.split(separator: ";").first == "application/json" else {
+        throw OAuthFailure("invalid_client_metadata")
+      }
+      let body = try await request.body.collect(upTo: 8192)
+      let registration = try JSONDecoder().decode(
+        ClientRegistrationRequest.self, from: Data(body.readableBytesView))
+      let client = try await authorization.register(registration)
+      var response = Response(
+        status: .created, headers: [.contentType: "application/json"],
+        body: .init(byteBuffer: ByteBuffer(bytes: try JSONEncoder().encode(client))))
+      protect(&response)
+      return response
     case (.get, "/authorize"):
       let fields = try form(request.uri.query ?? "")
       let id = try await authorization.begin(fields)
