@@ -14,15 +14,15 @@ struct ToolSettingsTests {
     var settings = try JSONDecoder().decode(
       ServiceSettings.self,
       from: Data(#"{"enabledServices":["reminders"],"disabledTools":[]}"#.utf8))
-    check(settings.disabledTools.isEmpty)
+    #expect(settings.disabledTools.isEmpty)
     let reminders = FakeReminders()
     let dispatcher = ToolDispatcher(testReminders: reminders)
     let catalog = await dispatcher.catalog()
-    check(catalog.contains { $0.name == "reminders_delete" && $0.service == .reminders })
-    check(catalog.contains { $0.name == "reminders_get" && $0.readOnly })
-    check(await reminders.writes.isEmpty)
-    check(await reminders.reads == 0)
-    check(await dispatcher.tools().contains { $0.name == "reminders_delete" })
+    #expect(catalog.contains { $0.name == "reminders_delete" && $0.service == .reminders })
+    #expect(catalog.contains { $0.name == "reminders_get" && $0.readOnly })
+    #expect(await reminders.writes.isEmpty)
+    #expect(await reminders.reads == 0)
+    #expect(await dispatcher.tools().contains { $0.name == "reminders_delete" })
 
     settings.disabledTools.insert("reminders_delete")
     try settings.save(to: url)
@@ -30,22 +30,22 @@ struct ToolSettingsTests {
     // A new dispatcher represents a restarted app loading the saved policy.
     let restarted = ToolDispatcher(testReminders: reminders)
     await restarted.setDisabledTools(restored.disabledTools)
-    check(await !restarted.tools().contains { $0.name == "reminders_delete" })
-    check(await restarted.tools().contains { $0.name == "reminders_get" })
+    #expect(await !restarted.tools().contains { $0.name == "reminders_delete" })
+    #expect(await restarted.tools().contains { $0.name == "reminders_get" })
     await expectFailure {
       try await restarted.call("reminders_delete", arguments: ["id": "fixture"])
     }
-    check(await reminders.writes.isEmpty)
+    #expect(await reminders.writes.isEmpty)
     _ = try await restarted.call("reminders_get", arguments: ["id": "fixture"])
     await restarted.setDisabledTools([])
     _ = try await restarted.call("reminders_delete", arguments: ["id": "fixture"])
-    check(await reminders.writes == ["delete:fixture"])
+    #expect(await reminders.writes == ["delete:fixture"])
     await reminders.setAvailable(false)
-    check(await restarted.tools().map(\.name) == ["connection_check"])
+    #expect(await restarted.tools().map(\.name) == ["connection_check"])
     await expectFailure {
       try await restarted.call("reminders_delete", arguments: ["id": "fixture"])
     }
-    check(await reminders.writes == ["delete:fixture"])
+    #expect(await reminders.writes == ["delete:fixture"])
   }
 
   @Test func livePolicyAppliesToEveryAuthorizedClient() async throws {
@@ -69,8 +69,8 @@ struct ToolSettingsTests {
         headers: [.contentType: "application/json", .accept: "application/json"],
         body: JSONEncoder().encode(request), grant: grant)
       let json = try JSONDecoder().decode(JSONValue.self, from: reply.data)
-      check(json.dictionaryValue?["result"]?.dictionaryValue?["isError"] == true)
+      #expect(json.dictionaryValue?["result"]?.dictionaryValue?["isError"] == true)
     }
-    check(await reminders.writes.isEmpty)
+    #expect(await reminders.writes.isEmpty)
   }
 }

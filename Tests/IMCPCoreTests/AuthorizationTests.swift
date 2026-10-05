@@ -34,10 +34,11 @@ struct AuthorizationFixture {
   func code() async throws -> String {
     let id = try await store.begin(fields())
     try await store.decide(id: id, approve: true)
-    let url = try require(await store.callback(for: id))
-    let components = try require(URLComponents(url: url, resolvingAgainstBaseURL: false))
-    check(components.queryItems?.first(where: { $0.name == "iss" })?.value == configuration.issuer)
-    return try require(components.queryItems?.first(where: { $0.name == "code" })?.value)
+    let url = try #require(await store.callback(for: id))
+    let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+    #expect(
+      components.queryItems?.first(where: { $0.name == "iss" })?.value == configuration.issuer)
+    return try #require(components.queryItems?.first(where: { $0.name == "code" })?.value)
   }
   func exchangeFields(_ code: String) -> [String: String] {
     [
@@ -78,19 +79,19 @@ struct AuthorizationTests {
     let grant = try await f.store.authenticate("Bearer \(tokens.accessToken)")
     let disk = try String(
       contentsOf: f.directory.appendingPathComponent("grants.json"), encoding: .utf8)
-    check(!disk.contains(tokens.accessToken))
-    check(!disk.contains(tokens.refreshToken))
+    #expect(!disk.contains(tokens.accessToken))
+    #expect(!disk.contains(tokens.refreshToken))
     let permissions = try FileManager.default.attributesOfItem(
       atPath: f.directory.appendingPathComponent("grants.json").path)
-    check((permissions[.posixPermissions] as? Int) == 0o600)
+    #expect((permissions[.posixPermissions] as? Int) == 0o600)
     let reopened = try AuthorizationStore(
       configuration: f.configuration, storeURL: f.directory.appendingPathComponent("grants.json"))
-    check(try await reopened.authenticate("Bearer \(tokens.accessToken)") == grant)
+    #expect(try await reopened.authenticate("Bearer \(tokens.accessToken)") == grant)
     let rotated = try await reopened.exchange([
       "grant_type": "refresh_token", "client_id": f.clientID,
       "resource": f.configuration.resource, "refresh_token": tokens.refreshToken,
     ])
-    check(try await reopened.authenticate("Bearer \(rotated.accessToken)") == grant)
+    #expect(try await reopened.authenticate("Bearer \(rotated.accessToken)") == grant)
     await expectFailure { try await reopened.authenticate("Bearer \(tokens.accessToken)") }
     try await reopened.revoke(grant)
     await expectFailure { try await reopened.authenticate("Bearer \(rotated.accessToken)") }
@@ -131,12 +132,12 @@ struct AuthorizationTests {
       await expectFailure { try await f.store.begin(fields) }
     }
     let id = try await f.store.begin(f.fields())
-    check(try await f.store.callback(for: id) == nil)
+    #expect(try await f.store.callback(for: id) == nil)
     try await f.store.decide(id: id, approve: false)
-    let url = try require(await f.store.callback(for: id))
-    check(url.absoluteString.contains("error=access_denied"))
-    check(!url.absoluteString.contains("code="))
-    check(await f.store.clients().isEmpty)
+    let url = try #require(await f.store.callback(for: id))
+    #expect(url.absoluteString.contains("error=access_denied"))
+    #expect(!url.absoluteString.contains("code="))
+    #expect(await f.store.clients().isEmpty)
   }
 
   @Test func refreshReplayRevokesFamilyAndPauseRejects() async throws {
@@ -165,7 +166,7 @@ struct AuthorizationTests {
     await expectFailure { try await f.store.begin(f.fields()) }
     let reopened = try AuthorizationStore(
       configuration: f.configuration, storeURL: f.directory.appendingPathComponent("grants.json"))
-    check(await reopened.approvals().isEmpty)
+    #expect(await reopened.approvals().isEmpty)
   }
 
   @Test func expirationsAndFailedPersistenceFailClosed() async throws {
@@ -184,8 +185,8 @@ struct AuthorizationTests {
     _ = try await expired.authenticate("Bearer \(refreshed.accessToken)")
     let id = try await f.store.begin(f.fields())
     try await f.store.decide(id: id, approve: true)
-    let callback = try require(await f.store.callback(for: id))
-    let code = try require(
+    let callback = try #require(await f.store.callback(for: id))
+    let code = try #require(
       URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems?.first {
         $0.name == "code"
       }?.value)
@@ -195,7 +196,7 @@ struct AuthorizationTests {
     try FileManager.default.createDirectory(at: storeURL, withIntermediateDirectories: false)
     let before = await f.store.clients().count
     await expectFailure { try await f.store.exchange(f.exchangeFields(code)) }
-    check(await f.store.clients().count == before)
+    #expect(await f.store.clients().count == before)
 
   }
 

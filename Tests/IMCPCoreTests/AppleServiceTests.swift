@@ -43,10 +43,10 @@ struct AppleServiceTests {
     let rule = try decode(
       RepeatRule.self, #"{"frequency":"monthly","weekdays":[{"day":2,"week":-1}],"count":6}"#)
     let native = try rule.native()
-    check(native.frequency == .monthly && native.daysOfTheWeek?.first?.weekNumber == -1)
-    check(native.recurrenceEnd?.occurrenceCount == 6)
+    #expect(native.frequency == .monthly && native.daysOfTheWeek?.first?.weekNumber == -1)
+    #expect(native.recurrenceEnd?.occurrenceCount == 6)
     let roundtrip = try JSONDictionary(encoding: RepeatRule(native))
-    check(roundtrip["frequency"] == "monthly" && roundtrip["count"] == 6)
+    #expect(roundtrip["frequency"] == "monthly" && roundtrip["count"] == 6)
     for text in [
       #"{"frequency":"weekly","interval":0}"#, #"{"frequency":"daily","weekdays":[{"day":2}]}"#,
       #"{"frequency":"weekly","weekdays":[{"day":2,"week":1}]}"#,
@@ -58,13 +58,13 @@ struct AppleServiceTests {
       await expectFailure { try decode(RepeatRule.self, text).native() }
     }
     let relative = try decode(TimeAlarm.self, #"{"offsetSeconds":-900}"#).native()
-    check(relative.relativeOffset == -900)
-    check(TimeAlarm(relative)?.offsetSeconds == -900)
+    #expect(relative.relativeOffset == -900)
+    #expect(TimeAlarm(relative)?.offsetSeconds == -900)
     let absolute = try decode(TimeAlarm.self, #"{"at":"2026-10-03T12:00:00Z"}"#).native()
-    check(TimeAlarm(absolute)?.at == "2026-10-03T12:00:00Z")
+    #expect(TimeAlarm(absolute)?.at == "2026-10-03T12:00:00Z")
     let geofence = EKAlarm()
     geofence.structuredLocation = EKStructuredLocation(title: "Fixture")
-    check(!TimeAlarm.supports(geofence) && TimeAlarm(geofence) == nil)
+    #expect(!TimeAlarm.supports(geofence) && TimeAlarm(geofence) == nil)
     for text in [
       "{}", #"{"at":"2026-10-03T12:00:00Z","offsetSeconds":0}"#, #"{"offsetSeconds":999999999}"#,
     ] {
@@ -82,12 +82,12 @@ struct AppleServiceTests {
     let options = try EventOptions(
       alarms: [try decode(TimeAlarm.self, #"{"offsetSeconds":-900}"#)], recurrence: nil)
     options.apply(to: reminder)
-    check(reminder.alarms?.count == 2)
-    check(reminder.alarms?.contains(where: { $0.structuredLocation != nil }) == true)
-    check(reminder.alarms?.contains(where: { $0.relativeOffset == -900 }) == true)
+    #expect(reminder.alarms?.count == 2)
+    #expect(reminder.alarms?.contains(where: { $0.structuredLocation != nil }) == true)
+    #expect(reminder.alarms?.contains(where: { $0.relativeOffset == -900 }) == true)
     try EventOptions(alarms: [], recurrence: nil).apply(to: reminder)
-    check(reminder.alarms?.count == 1)
-    check(reminder.alarms?.first?.structuredLocation != nil)
+    #expect(reminder.alarms?.count == 1)
+    #expect(reminder.alarms?.first?.structuredLocation != nil)
   }
 
   @Test @MainActor func contactPatchesPreserveUnrelatedFields() throws {
@@ -105,19 +105,19 @@ struct AppleServiceTests {
     )
     try changes.validate()
     NativeContacts.apply(changes, to: contact)
-    check(
+    #expect(
       contact.givenName == "Updated" && contact.familyName == "Preserved"
         && contact.nickname == "Keep")
-    check(contact.phoneNumbers.first?.value.stringValue == "555-0100")
-    check(contact.birthday?.year == nil && contact.birthday?.day == 29)
+    #expect(contact.phoneNumbers.first?.value.stringValue == "555-0100")
+    #expect(contact.birthday?.year == nil && contact.birthday?.day == 29)
     let clear = try decode(
       ContactChanges.self, #"{"givenName":"","emails":[],"clear":["birthday"]}"#)
     try clear.validate()
     NativeContacts.apply(clear, to: contact)
-    check(contact.givenName.isEmpty && contact.emailAddresses.isEmpty && contact.birthday == nil)
+    #expect(contact.givenName.isEmpty && contact.emailAddresses.isEmpty && contact.birthday == nil)
     let json = try JSONDictionary(encoding: NativeContacts.record(contact))
-    check(json["givenName"] == nil && json["emails"] == nil && json["birthday"] == nil)
-    check(json["familyName"] == "Preserved" && json["message"] == nil && json["success"] == nil)
+    #expect(json["givenName"] == nil && json["emails"] == nil && json["birthday"] == nil)
+    #expect(json["familyName"] == "Preserved" && json["message"] == nil && json["success"] == nil)
   }
 
   @Test func disabledAdaptersDoNotConstructStores() async throws {
@@ -127,7 +127,7 @@ struct AppleServiceTests {
       CalendarTools(access: calendar) as any AppleToolModule, ContactTools(access: contacts),
     ] {
       let dispatcher = ToolDispatcher(modules: [module])
-      check(await dispatcher.tools().map(\.name) == ["connection_check"])
+      #expect(await dispatcher.tools().map(\.name) == ["connection_check"])
       for tool in await module.mcpToolMetadata {
         await expectFailure { try await dispatcher.call(tool.name, arguments: [:]) }
       }
@@ -145,13 +145,13 @@ struct AppleServiceTests {
   @Test func unselectedServicesStayDisabledAfterReload() throws {
     var settings = try decode(
       ServiceSettings.self, #"{"enabledServices":["reminders"],"disabledTools":[]}"#)
-    check(
+    #expect(
       settings[.reminders] && !settings[.calendar] && !settings[.contacts]
         && !settings[.maps])
     settings[.contacts] = true
     let restored = try JSONDecoder().decode(
       ServiceSettings.self, from: JSONEncoder().encode(settings))
-    check(restored[.reminders] && restored[.contacts] && !restored[.calendar])
+    #expect(restored[.reminders] && restored[.contacts] && !restored[.calendar])
   }
 
   @Test func calendarAndContactsValidateBeforeDispatch() async throws {
@@ -186,18 +186,18 @@ struct AppleServiceTests {
       try await dispatcher.call(
         "contacts_create", arguments: ["accountID": "account", "changes": ["nickname": "Alone"]])
     }
-    check(await calendar.calls.isEmpty)
-    check(await contacts.calls.isEmpty)
+    #expect(await calendar.calls.isEmpty)
+    #expect(await contacts.calls.isEmpty)
     _ = try await dispatcher.call(
       "calendar_delete",
       arguments: ["id": "series", "start": "2026-10-03T12:00:00Z", "span": "futureEvents"])
     _ = try await dispatcher.call(
       "contacts_edit", arguments: ["id": "individual-card", "changes": ["familyName": "Changed"]])
-    check(await calendar.calls == ["delete:series:2026-10-03T12:00:00Z:futureEvents"])
-    check(await contacts.calls == ["edit:individual-card"])
+    #expect(await calendar.calls == ["delete:series:2026-10-03T12:00:00Z:futureEvents"])
+    #expect(await contacts.calls == ["edit:individual-card"])
     await calendar.setAvailable(false)
     await contacts.setAvailable(false)
-    check(await dispatcher.tools().map(\.name) == ["connection_check"])
+    #expect(await dispatcher.tools().map(\.name) == ["connection_check"])
     await expectFailure {
       try await dispatcher.call("contacts_delete", arguments: ["id": "individual-card"])
     }
@@ -310,12 +310,12 @@ struct MapTests {
     await expectFailure {
       try await dispatcher.call("maps_search", arguments: ["query": "Fixture", "near": .null])
     }
-    check(await maps.calls == 0)
+    #expect(await maps.calls == 0)
     let result = try await dispatcher.call(
       "maps_directions",
       arguments: ["from": ["latitude": 0, "longitude": 0], "to": ["latitude": 1, "longitude": 1]])
     let json = try JSONDictionary(encoding: result)
-    check(Set(json.keys) == ["distanceMeters", "travelSeconds"])
+    #expect(Set(json.keys) == ["distanceMeters", "travelSeconds"])
     let native = await NativeMaps()
     await expectFailure { try await native.search(query: "Fixture", near: nil, limit: 1) }
   }
@@ -350,9 +350,9 @@ struct ReminderRangeTests {
       listIDs: ["list"], dueFrom: AppleDate(date: "2026-10-03"),
       dueBefore: AppleDate(date: "2026-10-05"), timeZone: "America/New_York")
     let page = try query.resolve().page(records)
-    check(page.reminders.map(\.id) == ["item-0", "item-1"])
+    #expect(page.reminders.map(\.id) == ["item-0", "item-1"])
     let json = try JSONDictionary(encoding: page.reminders[0])
-    check(json["notes"] == nil && json["alarms"] == nil && json["recurrence"] == nil)
+    #expect(json["notes"] == nil && json["alarms"] == nil && json["recurrence"] == nil)
     await expectFailure {
       try ReminderQuery(listIDs: ["list"], due: .today, dueFrom: AppleDate(date: "2026-10-03"))
         .resolve()

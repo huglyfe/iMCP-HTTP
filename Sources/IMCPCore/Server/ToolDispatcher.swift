@@ -20,7 +20,8 @@ public actor ToolDispatcher {
   private let modules: [any AppleToolModule]
   public init(
     reminders: EventKitReminders? = nil, calendar: EventKitCalendar? = nil,
-    contacts: NativeContacts? = nil, maps: NativeMaps? = nil, photos: NativePhotos? = nil
+    contacts: NativeContacts? = nil, maps: NativeMaps? = nil, photos: NativePhotos? = nil,
+    bluetooth: NativeBluetooth? = nil, mail: NativeMail? = nil, notes: NativeNotes? = nil
   ) {
     var modules: [any AppleToolModule] = []
     if let reminders { modules.append(ReminderTools(access: reminders)) }
@@ -28,6 +29,9 @@ public actor ToolDispatcher {
     if let contacts { modules.append(ContactTools(access: contacts)) }
     if let photos { modules.append(PhotoTools(access: photos)) }
     if let maps { modules.append(MapTools(access: maps)) }
+    if let bluetooth { modules.append(BluetoothTools(access: bluetooth)) }
+    if let mail { modules.append(MailTools(access: mail)) }
+    if let notes { modules.append(NoteTools(access: notes)) }
     self.modules = modules
   }
   init(testReminders: any ReminderAccess) { modules = [ReminderTools(access: testReminders)] }

@@ -85,17 +85,18 @@ struct ClientAcceptanceTests {
       }
       try await Task.sleep(for: .milliseconds(50))
     }
-    check(!process.isRunning)
+    #expect(!process.isRunning)
     if process.isRunning { process.terminate() }
     process.waitUntilExit()
-    check(process.terminationStatus == 0)
+    #expect(process.terminationStatus == 0)
     if client == "codex" {
-      check(FileManager.default.fileExists(atPath: root.appendingPathComponent("revoke-done").path))
+      #expect(
+        FileManager.default.fileExists(atPath: root.appendingPathComponent("revoke-done").path))
     } else {
       // A successful client exit alone isn't proof that the token exchange completed.
-      check(await authorization.clients().count == 1)
+      #expect(await authorization.clients().count == 1)
       let restored = try AuthorizationStore(configuration: configuration, storeURL: url)
-      check(await restored.clients().count == 1)
+      #expect(await restored.clients().count == 1)
     }
     server.cancel()
     _ = try? await server.value

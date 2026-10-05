@@ -8,13 +8,15 @@
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>CFBundleName</key><string>iMCP-HTTP</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.4.0</string>
+    <key>CFBundleShortVersionString</key><string>0.5.0</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>NSRemindersFullAccessUsageDescription</key><string>Allow approved AI clients to read and manage reminders when you enable Reminders in iMCP-HTTP.</string>
     <key>NSCalendarsFullAccessUsageDescription</key><string>Allow approved AI clients to read and manage events when you enable Calendar in iMCP-HTTP.</string>
     <key>NSPhotoLibraryUsageDescription</key><string>Allow approved AI clients to read photo and album metadata when you enable Photos in iMCP-HTTP.</string>
     <key>NSContactsUsageDescription</key><string>Allow approved AI clients to read and manage contacts when you enable Contacts in iMCP-HTTP.</string>
+    <key>NSBluetoothAlwaysUsageDescription</key><string>Allow approved AI clients to scan and interact with Bluetooth LE peripherals when you enable Bluetooth LE in iMCP-HTTP.</string>
+    <key>NSAppleEventsUsageDescription</key><string>Allow approved AI clients to read and manage Mail and Notes when you enable those services in iMCP-HTTP.</string>
     <key>NSHighResolutionCapable</key><true/>
 </dict>
 </plist>

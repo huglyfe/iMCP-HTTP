@@ -49,22 +49,22 @@ struct HTTPTests {
       }
       for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
       let (data, response) = try await session.data(for: request)
-      let http = try require(response as? HTTPURLResponse)
+      let http = try #require(response as? HTTPURLResponse)
       return (http.statusCode, data, http)
     }
 
     let metadata = try await request("/.well-known/oauth-protected-resource/mcp")
-    check(metadata.0 == 200)
+    #expect(metadata.0 == 200)
     let missing = try await request("/mcp", method: "POST", body: "{}")
-    check(missing.0 == 401)
-    check(
+    #expect(missing.0 == 401)
+    #expect(
       missing.2.value(forHTTPHeaderField: "WWW-Authenticate")?.contains("resource_metadata") == true
     )
-    check(
+    #expect(
       try await request(
         "/.well-known/oauth-authorization-server", headers: ["Origin": "https://evil.example"]
       ).0 == 403)
-    check(
+    #expect(
       try await request(
         "/.well-known/oauth-authorization-server", headers: ["Host": "evil.example"]
       ).0 == 400)
@@ -74,18 +74,18 @@ struct HTTPTests {
       body:
         #"{"client_name":"HTTP fixture","redirect_uris":["http://127.0.0.1:49152/callback"],"token_endpoint_auth_method":"none","grant_types":["authorization_code","refresh_token"],"response_types":["code"]}"#
     )
-    check(registered.0 == 201)
-    let registration = try require(
+    #expect(registered.0 == 201)
+    let registration = try #require(
       JSONSerialization.jsonObject(with: registered.1) as? [String: Any])
-    let clientID = try require(registration["client_id"] as? String)
-    check(registration["client_secret"] == nil)
-    check(registration["token_endpoint_auth_method"] as? String == "none")
-    check(await f.store.clients().isEmpty)
-    check(
+    let clientID = try #require(registration["client_id"] as? String)
+    #expect(registration["client_secret"] == nil)
+    #expect(registration["token_endpoint_auth_method"] as? String == "none")
+    #expect(await f.store.clients().isEmpty)
+    #expect(
       try await request(
         "/register", method: "POST", body: #"{"redirect_uris":["https://example.com/callback"]}"#
       ).0 == 400)
-    check(
+    #expect(
       try await request("/register", method: "POST", body: String(repeating: "x", count: 8193)).0
         == 413)
 
@@ -95,99 +95,100 @@ struct HTTPTests {
     fields["client_id"] = clientID
     url.queryItems = fields.map { URLQueryItem(name: $0.key, value: $0.value) }
     let authorization = try await request("/authorize?\(url.percentEncodedQuery!)")
-    check(authorization.0 == 303)
-    let waitingPath = try require(authorization.2.value(forHTTPHeaderField: "Location"))
-    let pending = try require(await f.store.approvals().first)
-    check(waitingPath == "/approval?id=\(pending.id)")
+    #expect(authorization.0 == 303)
+    let waitingPath = try #require(authorization.2.value(forHTTPHeaderField: "Location"))
+    let pending = try #require(await f.store.approvals().first)
+    #expect(waitingPath == "/approval?id=\(pending.id)")
     for _ in 0..<3 {
       let page = try await request(waitingPath)
-      check(page.0 == 200)
+      #expect(page.0 == 200)
       let html = String(decoding: page.1, as: UTF8.self)
-      check(!html.contains("http-equiv=\"refresh\""))
-      check(!html.contains("test-state"))
-      check(page.2.value(forHTTPHeaderField: "Cache-Control") == "no-store")
-      let policy = try require(page.2.value(forHTTPHeaderField: "Content-Security-Policy"))
-      check(policy.contains("script-src 'nonce-") && policy.contains("connect-src 'self'"))
-      check(!policy.contains("unsafe-inline"))
+      #expect(!html.contains("http-equiv=\"refresh\""))
+      #expect(!html.contains("test-state"))
+      #expect(page.2.value(forHTTPHeaderField: "Cache-Control") == "no-store")
+      let policy = try #require(page.2.value(forHTTPHeaderField: "Content-Security-Policy"))
+      #expect(policy.contains("script-src 'nonce-") && policy.contains("connect-src 'self'"))
+      #expect(!policy.contains("unsafe-inline"))
     }
-    check(await f.store.approvals().count == 1)
+    #expect(await f.store.approvals().count == 1)
     let statusPath = "/approval/status?id=\(pending.id)"
     let waiting = try await request(statusPath)
-    check(waiting.0 == 200)
-    check(try JSONSerialization.jsonObject(with: waiting.1) as? [String: Bool] == ["ready": false])
-    check(try await request(statusPath, headers: ["Origin": "https://evil.example"]).0 == 403)
-    check(try await request(statusPath, method: "POST").0 == 404)
-    check(try await request("/approve", method: "POST", body: "{}").0 == 404)
+    #expect(waiting.0 == 200)
+    #expect(
+      try JSONSerialization.jsonObject(with: waiting.1) as? [String: Bool] == ["ready": false])
+    #expect(try await request(statusPath, headers: ["Origin": "https://evil.example"]).0 == 403)
+    #expect(try await request(statusPath, method: "POST").0 == 404)
+    #expect(try await request("/approve", method: "POST", body: "{}").0 == 404)
     try await f.store.decide(id: pending.id, approve: true)
     for _ in 0..<3 {
       let ready = try await request(statusPath)
-      check(ready.0 == 200)
-      check(try JSONSerialization.jsonObject(with: ready.1) as? [String: Bool] == ["ready": true])
+      #expect(ready.0 == 200)
+      #expect(try JSONSerialization.jsonObject(with: ready.1) as? [String: Bool] == ["ready": true])
     }
     let redirect = try await request("/approval?id=\(pending.id)")
-    check(redirect.0 == 302)
-    let location = try require(redirect.2.value(forHTTPHeaderField: "Location"))
-    let callback = try require(URLComponents(string: location))
-    let code = try require(callback.queryItems?.first(where: { $0.name == "code" })?.value)
+    #expect(redirect.0 == 302)
+    let location = try #require(redirect.2.value(forHTTPHeaderField: "Location"))
+    let callback = try #require(URLComponents(string: location))
+    let code = try #require(callback.queryItems?.first(where: { $0.name == "code" })?.value)
     var exchangeFields = f.exchangeFields(code)
     exchangeFields["client_id"] = clientID
     url.queryItems = exchangeFields.map { URLQueryItem(name: $0.key, value: $0.value) }
     let exchange = try await request(
       "/token", method: "POST", body: url.percentEncodedQuery!,
       headers: ["Content-Type": "application/x-www-form-urlencoded"])
-    check(exchange.0 == 200)
+    #expect(exchange.0 == 200)
     let tokens = try JSONDecoder().decode(TokenResponse.self, from: exchange.1)
-    check(exchange.2.value(forHTTPHeaderField: "Cache-Control") == "no-store")
-    check(try await request(statusPath).0 == 400)
+    #expect(exchange.2.value(forHTTPHeaderField: "Cache-Control") == "no-store")
+    #expect(try await request(statusPath).0 == 400)
     let ended = try await request(waitingPath)
-    check(ended.0 == 400)
-    check(ended.2.value(forHTTPHeaderField: "Content-Type") == "text/html; charset=utf-8")
-    check(String(decoding: ended.1, as: UTF8.self).contains("Start login again in your client"))
+    #expect(ended.0 == 400)
+    #expect(ended.2.value(forHTTPHeaderField: "Content-Type") == "text/html; charset=utf-8")
+    #expect(String(decoding: ended.1, as: UTF8.self).contains("Start login again in your client"))
 
     let deniedID = try await f.store.begin(fields)
     try await f.store.decide(id: deniedID, approve: false)
-    check(try await request("/approval/status?id=\(deniedID)").0 == 200)
+    #expect(try await request("/approval/status?id=\(deniedID)").0 == 200)
     let denial = try await request("/approval?id=\(deniedID)")
-    check(denial.0 == 302)
-    let deniedLocation = try require(denial.2.value(forHTTPHeaderField: "Location"))
-    check(deniedLocation.contains("error=access_denied") && !deniedLocation.contains("code="))
+    #expect(denial.0 == 302)
+    let deniedLocation = try #require(denial.2.value(forHTTPHeaderField: "Location"))
+    #expect(deniedLocation.contains("error=access_denied") && !deniedLocation.contains("code="))
 
     let initialize = """
       {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"acceptance","version":"1"},"capabilities":{"experimental":{"codex/auth-change":{}}}}}
       """
     let initialized = try await request(
       "/mcp", method: "POST", token: tokens.accessToken, body: initialize)
-    check(initialized.0 == 200)
-    let initJSON = try require(JSONSerialization.jsonObject(with: initialized.1) as? [String: Any])
-    check(initJSON["error"] == nil)
-    let result = try require(initJSON["result"] as? [String: Any])
-    let capabilities = try require(result["capabilities"] as? [String: Any])
-    check((capabilities["tools"] as? [String: Any])?["listChanged"] as? Bool == false)
+    #expect(initialized.0 == 200)
+    let initJSON = try #require(JSONSerialization.jsonObject(with: initialized.1) as? [String: Any])
+    #expect(initJSON["error"] == nil)
+    let result = try #require(initJSON["result"] as? [String: Any])
+    let capabilities = try #require(result["capabilities"] as? [String: Any])
+    #expect((capabilities["tools"] as? [String: Any])?["listChanged"] as? Bool == false)
     let listing = try await request(
       "/mcp", method: "POST", token: tokens.accessToken,
       body: #"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#)
-    check(String(decoding: listing.1, as: UTF8.self).contains("connection_check"))
+    #expect(String(decoding: listing.1, as: UTF8.self).contains("connection_check"))
     let call =
       #"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"connection_check","arguments":{}}}"#
     async let first = request("/mcp", method: "POST", token: tokens.accessToken, body: call)
     async let second = request("/mcp", method: "POST", token: tokens.accessToken, body: call)
     for result in try await [first, second] {
-      check(result.0 == 200)
-      let envelope = try require(JSONSerialization.jsonObject(with: result.1) as? [String: Any])
-      let reply = try require(envelope["result"] as? [String: Any])
-      let content = try require(reply["content"] as? [[String: Any]])
-      let text = try require(content.first?["text"] as? String)
-      let object = try require(
+      #expect(result.0 == 200)
+      let envelope = try #require(JSONSerialization.jsonObject(with: result.1) as? [String: Any])
+      let reply = try #require(envelope["result"] as? [String: Any])
+      let content = try #require(reply["content"] as? [[String: Any]])
+      let text = try #require(content.first?["text"] as? String)
+      let object = try #require(
         JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
-      check(object["connected"] as? Bool == true && object["appleDataAccessed"] as? Bool == false)
+      #expect(object["connected"] as? Bool == true && object["appleDataAccessed"] as? Bool == false)
     }
-    check(try await request("/mcp", token: tokens.accessToken).0 == 405)
-    check(
+    #expect(try await request("/mcp", token: tokens.accessToken).0 == 405)
+    #expect(
       try await request(
         "/mcp", method: "POST", token: tokens.accessToken,
         body: String(repeating: "x", count: 65537)
       ).0 == 413)
-    check(
+    #expect(
       try await request(
         "/mcp", method: "POST", token: tokens.accessToken, body: call, headers: ["Accept": ";"]
       ).0 == 406)
@@ -196,10 +197,10 @@ struct HTTPTests {
       body:
         #"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"reminders_delete","arguments":{"id":"fake"}}}"#
     )
-    check(String(decoding: disabled.1, as: UTF8.self).contains("isError"))
+    #expect(String(decoding: disabled.1, as: UTF8.self).contains("isError"))
     let grant = try await f.store.authenticate("Bearer \(tokens.accessToken)")
     try await f.store.revoke(grant)
-    check(
+    #expect(
       try await request("/mcp", method: "POST", token: tokens.accessToken, body: call).0 == 401)
     task.cancel()
     _ = try? await task.value

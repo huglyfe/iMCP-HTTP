@@ -13,14 +13,6 @@ struct AppRuntimeTests {
     return url
   }
 
-  private func eventually(_ condition: () -> Bool) async throws {
-    let deadline = ContinuousClock.now.advanced(by: .seconds(3))
-    while !condition(), ContinuousClock.now < deadline {
-      try await Task.sleep(for: .milliseconds(5))
-    }
-    #expect(condition())
-  }
-
   @Test func startupPauseRestartAndLateReadiness() async throws {
     let root = try directory()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -28,7 +20,7 @@ struct AppRuntimeTests {
     let runtime = AppRuntime(
       configuration: .init(port: 19870), directory: root, runServer: listener.run)
     runtime.startIfNeeded()
-    await listener.waitForStart()
+    try await listener.waitForStart()
     #expect(runtime.state == .starting)
     // Starting isn't Running until the listener reports readiness.
     let lateReady = await listener.ready
@@ -38,7 +30,7 @@ struct AppRuntimeTests {
     await lateReady?()
     #expect(runtime.state == .stopped)
     runtime.start()
-    await listener.waitForStart()
+    try await listener.waitForStart()
     await listener.reportReady()
     try await eventually { runtime.state == .running }
     runtime.startIfNeeded()
@@ -59,7 +51,7 @@ struct AppRuntimeTests {
     }
     #expect(runtime.errorMessage?.contains("HTTP listener") == true)
     runtime.start()
-    await listener.waitForStart()
+    try await listener.waitForStart()
     await listener.reportReady()
     try await eventually { runtime.state == .running }
     #expect(runtime.errorMessage == nil)
@@ -74,7 +66,7 @@ struct AppRuntimeTests {
       configuration: .init(), directory: root, runServer: listener.run)
     let remainingRuntime = { [weak runtime] in runtime }
     runtime?.start()
-    await listener.waitForStart()
+    try await listener.waitForStart()
     await listener.reportReady()
     runtime = nil
     #expect(remainingRuntime() == nil)
@@ -125,7 +117,7 @@ struct AppRuntimeTests {
       configuration: .init(), directory: root, runServer: listener.run,
       saveSettings: { _, _ in throw CocoaError(.fileWriteNoPermission) })
     runtime.start()
-    await listener.waitForStart()
+    try await listener.waitForStart()
     await listener.reportReady()
     try await eventually { runtime.state == .running && !runtime.tools.isEmpty }
     // Maps has no native permission prompt and performs no query on enablement.
@@ -144,21 +136,17 @@ struct AppRuntimeTests {
 private actor FixtureListener {
   var starts = 0
   var ready: (@Sendable () async -> Void)?
-  var waiter: CheckedContinuation<Void, Never>?
   let failFirst: Bool
   init(failFirst: Bool = false) { self.failFirst = failFirst }
   func run(_ server: LocalServer, ready: @escaping @Sendable () async -> Void) async throws {
     starts += 1
     if failFirst && starts == 1 { throw CocoaError(.fileReadUnknown) }
     self.ready = ready
-    waiter?.resume()
-    waiter = nil
     defer { self.ready = nil }
     try await Task.sleep(for: .seconds(30))
   }
-  func waitForStart() async {
-    if ready != nil { return }
-    await withCheckedContinuation { waiter = $0 }
+  func waitForStart() async throws {
+    try await eventually { self.ready != nil }
   }
   func reportReady() async { await ready?() }
 }

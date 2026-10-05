@@ -31,6 +31,6 @@ Never commit credentials, authorization codes, tokens, signing keys, account dat
 
 `docs/PLAN.md` is the initial implementation plan requested by the owner. Requirements describe intended behavior; architecture and README must distinguish it from implemented behavior. Update the plan as milestones land rather than creating parallel roadmaps.
 
-Operational status and dated next actions belong in the Vault: `Projects/iMCP-HTTP/iMCP-HTTP Status.md`. Keep machine-specific details there; use relative paths and portable instructions in this repository. Consult the Vault's own instructions before editing it.
+Keep machine-specific operational notes outside this repository. Use relative paths, portable developer instructions, and synthetic examples. CONTRIBUTING.md owns the developer workflow; docs/PLAN.md owns milestone and acceptance status.
 
-The repository is private until the owner explicitly authorizes publication. A permissive license does not change repository visibility.
+Original code uses Apache-2.0; preserve all third-party notices. Preparing a public alpha does not itself authorize changing GitHub visibility, publishing a release, or deploying production integrations. Those actions require the owner's explicit instruction.

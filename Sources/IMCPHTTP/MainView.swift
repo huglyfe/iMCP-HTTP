@@ -59,6 +59,12 @@ struct MainView: View {
       .font(.caption).foregroundStyle(.secondary)
       ForEach(AppleService.allCases) { service in
         Section {
+          if service == .mail || service == .notes {
+            Text(
+              "Keep \(service.title) open while using this service. Enabling it opens the app if needed."
+            )
+            .font(.caption).foregroundStyle(.secondary)
+          }
           ForEach(
             runtime.tools.filter { $0.service == service }.sorted { $0.readOnly && !$1.readOnly }
           ) { tool in
@@ -82,8 +88,10 @@ struct MainView: View {
             .toggleStyle(.switch).controlSize(.small)
             .tint(service.color)
             .disabled(
-              !runtime.settings[service] || runtime.changingService != nil
-                || runtime.changingTool != nil)
+              !runtime.settings[service] || runtime.changingService == service
+                || runtime.changingTool == tool.name
+            )
+            .allowsHitTesting(runtime.changingService == nil && runtime.changingTool == nil)
           }
         } header: {
           ServiceRow(runtime: runtime, service: service)

@@ -23,7 +23,9 @@ These are product contracts. Current implementation and verification limits are 
 - One normal, resizable Mac window with a Dock icon and Command-Tab presence, plus a persistent menu-bar icon. Preserve Services, Connections, and Setup in a clearly spaced native tab strip below the title bar with one content area and no enclosing tab box; no sidebar redesign or duplicate Settings interface. Closing the window keeps access running; reopening presents the single window. Every Quit route stops the listener before termination.
 - Preserve the compact menu panel with its server/service switches, pending approvals, Open, and Quit. It omits setup commands and the app-name subtitle. Services retains distinct colors for each service. Setup contains an alphabetical, searchable client directory with instructions, copyable configuration, vendor links, and honest compatibility labels. Hosted clients that cannot reach loopback have explanatory entries rather than nonfunctional setup commands.
 - The main window exposes individual tools within each service, client approval/revocation, and connection setup. Tool choices are global across all approved clients and available accounts, not client-specific permissions.
+- Menu-bar service rows are dimmed and disabled whenever the MCP server is not running. Their saved choices remain intact; starting the server restores the controls.
 - Within each service, Services lists read-only tools first and write tools afterward, labeled “Read-only” and “Write” using the protocol tool metadata. Service sections omit the enabled/disabled status footer. Preserve the existing compact tool rows and searchable client directory.
+- Mail and Notes show a subtle caption below their service heading: keep the app open while using the service; enabling it opens the app if needed.
 - Put the shared-controls note at the top of Services. Omit the explanatory footers in Connections and Setup; keep client instructions, compatibility labels, and pending-approval details. Revoke is visibly red.
 - Disabled tools are omitted from discovery and rejected on subsequent calls by name, including stale client discovery. Persist choices across restart; turning a service off still blocks every tool in it.
 - Start the server at app launch independently of menu-panel presentation. Closing the window or menu panel leaves it running; Quit stops it. Keep one process, lazy native stores, and measure idle memory before claiming RAM improvements.
@@ -164,3 +166,63 @@ Read-only metadata through PhotoKit. Tools do not launch Photos.app, export byte
 - `photos_get(id)`: exact visible asset metadata.
 
 Asset metadata: ID, media, optional createdAt, width, height, optional durationSeconds, favorite. No private database, titles/captions/keywords/faces search, image content, full-library caching, or export. Standard page limits apply. Native results are capped at offset + limit + one and only the requested page is converted.
+
+## Bluetooth LE
+
+General CoreBluetooth central/GATT interaction, with no target device or application protocol. Explicit owner enablement and Bluetooth permission are required; powering on, OS pairing, and device-side authentication remain native. All clients share current connections and subscriptions. Service/tool switches and OAuth apply to every call. No automatic reconnect/retry, peripheral advertising mode, classic Bluetooth, descriptors, packet capture, device firmware, or vendor command interpreter.
+
+| Tool | Arguments / result |
+| --- | --- |
+| `ble_scan` | `seconds=5` (1–15), `serviceUUIDs=[]` (up to 32 distinct 16/32/128-bit UUIDs) → at most 128 devices from that scan |
+| `ble_devices` | Retained devices and current connection state; no implicit scan |
+| `ble_connect`, `ble_disconnect` | Exact scanned peripheral `id`; up to four connections |
+| `ble_services` | Connected peripheral `id` → service IDs, UUIDs, primary status |
+| `ble_characteristics` | `serviceID` → characteristic IDs, UUIDs, supported properties, notifying state |
+| `ble_read` | `characteristicID` → bytes as `base64`; requires read support and an unsubscribed characteristic |
+| `ble_write` | `characteristicID`, strict `base64`, `withResponse=true`; at most 512 bytes and the device's negotiated write size → `acknowledged` |
+| `ble_subscribe`, `ble_unsubscribe` | `characteristicID` → resulting `notifying`; native notify/indicate mode selection |
+| `ble_notifications` | Optional `cursor`, `limit=100` (1–200) → values, `nextCursor`, `dropped` |
+
+Device IDs are CoreBluetooth identifiers, not MAC addresses. Service/characteristic IDs are opaque handles that distinguish duplicate UUIDs and become stale after disconnect, timeout/cancellation, GATT invalidation, radio loss, or service shutdown. Device records include optional name/RSSI, advertised service UUIDs, and connected status; advertisements are untrusted peer data, not device identity authentication.
+
+One operation runs at a time; overlapping native operations fail `busy`. Native request timeout is 15 seconds (permission initialization up to 30). A first call also waits up to 15 seconds for initial unknown/resetting manager state; a settled radio-off state fails without waiting for the user to turn it on. Enablement and manager identity are rechecked after initialization. Timeouts/cancellation disconnect the affected peripheral to invalidate late callbacks. Explicit reads while notifying fail because CoreBluetooth cannot reliably distinguish a read response from an unsolicited value in the shared callback. Unsupported properties, oversized writes, stale targets, radio-off, and native errors fail without inventing protocol success. A successful without-response write means queued only; even an ATT write response does not confirm a device application action.
+
+Notification polling reads a shared non-consuming buffer of the latest 256 values, each up to 512 bytes, with sequence, characteristic ID, base64, and receive time. Retain `nextCursor` across polls; `dropped` indicates overwritten values. Omit cursor to begin at the oldest retained value. Cursors from before a reset fail `stale_cursor`. No MCP push/SSE connection is introduced. Disable/pause/quit clears radio activity and the buffer; connections/subscriptions are not restored after restart. Revoking one client blocks its future calls but does not disconnect shared devices. Disabling a subscription tool blocks subsequent calls; use unsubscribe/disconnect or disable the service to stop existing subscriptions.
+
+## Mail
+
+Uses Mail's public scripting dictionary and macOS Automation permission, without private databases or provider credentials. Mail may launch and synchronize. Account discovery covers Mail's configured accounts; unaccounted local/unified mailboxes are outside this slice. Mail exposes no mailbox UUID, so `mailboxID` encodes account ID and exact path components (up to 8192 encoded bytes). Renaming invalidates old and descendant IDs; refresh discovery. `id` for a message is its positive numeric Mail library ID returned as a string, always qualified by its mailbox. RFC Message-ID copies are never used as fuzzy write targets.
+
+| Tool | Arguments / result |
+| --- | --- |
+| `mail_accounts` | → account IDs/names |
+| `mail_mailboxes` | `accountID`, optional offset/limit → mailbox IDs, account ID, path components, unread count, optional nextOffset |
+| `mail_fetch` | `mailboxID`, optional `search`, `unreadOnly=false`, offset/limit → summaries and optional nextOffset |
+| `mail_get` | `id`, `mailboxID`, `maxCharacters=16384` (1–65536) → detail with plain-text body and bodyTruncated |
+| `mail_edit` | `id`, `mailboxID`, optional `read` and/or `flagged` → saved summary; omission preserves fields |
+| `mail_move` | `id`, `mailboxID`, `destinationMailboxID` in same account → saved summary |
+| `mail_delete` | `id`, `mailboxID` → native-confirmed deletion receipt |
+| `mail_mailbox_create` | `accountID`, `name`, optional `parentMailboxID` in that account → saved mailbox |
+| `mail_mailbox_rename` | `mailboxID`, `name` → saved mailbox with new ID |
+
+Search matches subject or sender, ignoring case/diacritics. Standard page bounds apply; ordering is Mail's native order, not a promised timestamp sort. Summaries contain ID/mailboxID/subject/sender/receivedAt/read/flagged; get adds the bounded body. Body access does not explicitly set read status or load remote images, but Mail can synchronize/download its content. No raw MIME/attachment export, draft/send/reply tools, account settings, bulk mutations, or mailbox deletion. Mailbox names are single nonempty components without `/`; discovery can still address existing names containing delimiters through encoded components. Mailbox create/rename may be restricted by the account. Deletion retention follows Mail/account settings, with no guarantee of recoverability. A move whose native library ID changes before readback reports `uncertain_outcome`; inspect the destination before retrying.
+
+## Notes
+
+Uses Notes' public scripting dictionary and macOS Automation permission. Native account, folder, and note IDs are exact targets; no default-folder assumption, private store, lock bypass, folder mutation, attachment export, or native checklist/tag emulation.
+
+| Tool | Arguments / result |
+| --- | --- |
+| `notes_accounts` | → IDs/names |
+| `notes_folders` | `accountID`, optional offset/limit → folder IDs/names/container IDs/shared, optional nextOffset |
+| `notes_fetch` | `folderID`, optional search/offset/limit → summaries, optional nextOffset |
+| `notes_get` | `id`, `maxCharacters=16384` (1–65536) → HTML/plaintext detail and bodyTruncated |
+| `notes_create` | `folderID`, `title`, `body=""` → saved detail; plain text is HTML-escaped, title is the first line |
+| `notes_edit` | `id`, `bodyHTML` → replaces the entire HTML including its title; saved detail |
+| `notes_append` | `id`, nonempty `text` → escaped plain text appended to existing HTML; saved detail |
+| `notes_move` | `id`, destination `folderID` in same account → saved detail |
+| `notes_delete` | `id` → native-confirmed deletion receipt |
+
+Search matches title/plaintext, ignoring case/diacritics; locked notes are searched only by title. Summaries contain ID/folderID/title/modifiedAt/locked/shared. Get returns metadata only for locked notes; unlocked HTML and plaintext are each independently capped, with a single truncation flag. Never treat truncated content as a full edit source. Body inputs are at most 16384 UTF-8 bytes. Notes derives its title from body content and may normalize HTML. Edit and append reject locked notes and notes with attachments because body replacement cannot guarantee attachment preservation; append also rejects existing HTML over 65536 characters. Reads can expose attachment references in native HTML but export no attachment bytes. Shared-account restrictions and deletion retention are decided by Notes. Moves whose IDs cannot be read back fail as uncertain instead of matching by title.
+
+Mail and Notes run one scripting operation at a time, with a 15-second timeout per Apple event and a host-enforced 20-second OSA execution deadline after interpreter initialization (an in-flight native event may finish later). Returned descriptor data is capped at 1 MiB; Apple may fetch whole bodies before response truncation. Native scripts receive typed arguments, never executable text. A timeout, cancellation, permission change, or readback failure cannot undo a sent mutation; read back before any retry. Native errors are sanitized and no Apple content is logged. A closed target app may need to be opened or re-enabled before Automation permission preflight succeeds.

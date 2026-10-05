@@ -88,12 +88,9 @@ public final class EventKitReminders: AppleAccess, ReminderAccess {
     let records = try await withTaskCancellationHandler {
       try await withCheckedThrowingContinuation { continuation in
         fetch.continuation = continuation
-        fetch.request = store.fetchReminders(matching: predicate) { reminders in
-          let records = reminders?.compactMap {
-            Self.record($0, summary: true, includeNotes: query.search != nil)
-          }
-          Task { @MainActor in fetch.finish(records) }
-        }
+        fetch.request = store.fetchReminders(
+          matching: predicate,
+          completion: Self.fetchCompletion(includeNotes: query.search != nil) { fetch.finish($0) })
         fetch.timeout = Task { @MainActor in
           do { try await Task.sleep(for: .seconds(15)) } catch { return }
           fetch.cancel(
@@ -109,6 +106,20 @@ public final class EventKitReminders: AppleAccess, ReminderAccess {
     // narrows the fetch; date-only/floating semantics are evaluated consistently in
     // the query timezone before pagination. Nothing is retained between calls.
     return query.page(records)
+  }
+
+  // EventKit calls back on its search queue. Explicit Sendable isolation also keeps
+  // the nested mapping closure off the main actor; only value snapshots cross back.
+  nonisolated static func fetchCompletion(
+    includeNotes: Bool,
+    finish: @escaping @MainActor @Sendable ([ReminderRecord]?) -> Void
+  ) -> @Sendable ([EKReminder]?) -> Void {
+    { @Sendable reminders in
+      let records = reminders?.compactMap {
+        record($0, summary: true, includeNotes: includeNotes)
+      }
+      Task { @MainActor in finish(records) }
+    }
   }
 
   func create(listID: String, changes: ReminderChanges) throws -> ReminderRecord {

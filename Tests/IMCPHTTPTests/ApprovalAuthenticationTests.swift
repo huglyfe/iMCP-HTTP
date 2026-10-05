@@ -133,15 +133,6 @@ struct ApprovalAuthenticationTests {
 }
 
 @MainActor
-private func eventually(_ condition: () -> Bool) async throws {
-  let deadline = ContinuousClock.now.advanced(by: .seconds(3))
-  while !condition(), ContinuousClock.now < deadline {
-    try await Task.sleep(for: .milliseconds(5))
-  }
-  try #require(condition())
-}
-
-@MainActor
 private final class FixtureAuthentication: OwnerAuthenticating {
   var calls = 0
   var cancellations = 0

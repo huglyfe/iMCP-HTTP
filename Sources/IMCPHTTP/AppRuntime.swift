@@ -32,16 +32,24 @@ final class AppRuntime: ObservableObject {
   private lazy var contacts = NativeContacts()
   private lazy var photos = NativePhotos()
   private lazy var maps = NativeMaps()
+  private lazy var bluetooth = NativeBluetooth()
+  private let automation = AutomationRunner()
+  private lazy var mail = NativeMail(runner: automation)
+  private lazy var notes = NativeNotes(runner: automation)
   @Published private(set) var settings = ServiceSettings()
   @Published private(set) var serviceStatus: [AppleService: String] = [:]
   @Published private(set) var changingService: AppleService?
   @Published private(set) var changingTool: String?
   @Published private(set) var tools: [ServiceTool] = []
   private lazy var dispatcher = ToolDispatcher(
-    reminders: reminders, calendar: calendar, contacts: contacts, maps: maps, photos: photos)
+    reminders: reminders, calendar: calendar, contacts: contacts, maps: maps, photos: photos,
+    bluetooth: bluetooth, mail: mail, notes: notes)
   private func access(_ service: AppleService) -> any AppleAccess {
     switch service {
     case .photos: photos
+    case .bluetooth: bluetooth
+    case .mail: mail
+    case .notes: notes
     case .reminders: reminders
     case .calendar: calendar
     case .contacts: contacts
@@ -170,6 +178,7 @@ final class AppRuntime: ObservableObject {
         }
       }
       await authorization.setAccepting(false)
+      self?.bluetooth.suspend()
       self?.serverTask = nil
       if let failure {
         self?.fail(
@@ -203,6 +212,7 @@ final class AppRuntime: ObservableObject {
 
   private func didStart() {
     guard state == .starting, !Task.isCancelled else { return }
+    bluetooth.resume()
     state = .running
   }
 
@@ -210,6 +220,7 @@ final class AppRuntime: ObservableObject {
     cancelApprovalAuthentication()
     guard let task = serverTask else { return }
     state = .stopping
+    bluetooth.suspend()
     task.cancel()
     await authorization?.setAccepting(false)
     await task.value

@@ -24,7 +24,8 @@ let package = Package(
         .product(name: "HTTPTypes", package: "swift-http-types"),
         .product(name: "Logging", package: "swift-log"),
         .product(name: "NIOPosix", package: "swift-nio"),
-      ]),
+      ],
+      resources: [.copy("Mail/Mail.applescript"), .copy("Notes/Notes.applescript")]),
     .executableTarget(name: "IMCPHTTP", dependencies: ["IMCPCore"]),
     .testTarget(name: "IMCPHTTPTests", dependencies: ["IMCPHTTP", "IMCPCore"]),
     .testTarget(

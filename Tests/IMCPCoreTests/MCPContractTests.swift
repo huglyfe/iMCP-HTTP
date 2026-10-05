@@ -11,11 +11,21 @@ struct MCPContractTests {
     defer { f.cleanup() }
     let tokens = try await f.tokens()
     let grant = try await f.store.authenticate("Bearer \(tokens.accessToken)")
+    let (mail, notes) = await MainActor.run {
+      let runner = FixtureScriptRunner()
+      let mail = NativeMail(runner: runner, permissionCheck: { _ in true })
+      let notes = NativeNotes(runner: runner, permissionCheck: { _ in true })
+      mail.setEnabled(true)
+      notes.setEnabled(true)
+      return (mail, notes)
+    }
     let gateway = MCPGateway(
       authorization: f.store,
       dispatcher: ToolDispatcher(modules: [
         ReminderTools(access: FakeReminders()), CalendarTools(access: FakeCalendar()),
         ContactTools(access: FakeContacts()), MapTools(access: FakeMaps()),
+        BluetoothTools(access: FixtureBluetooth()), MailTools(access: mail),
+        NoteTools(access: notes),
       ]))
     func request(_ method: String, version: String?, params: JSONDictionary? = nil) async throws
       -> MCPGateway.Reply
@@ -29,9 +39,9 @@ struct MCPContractTests {
         body: JSONEncoder().encode(message), grant: grant)
     }
     func result(_ reply: MCPGateway.Reply) throws -> JSONDictionary {
-      check(reply.status == .ok)
+      #expect(reply.status == .ok)
       let envelope = try JSONDecoder().decode(JSONValue.self, from: reply.data)
-      return try require(envelope.dictionaryValue?["result"]?.dictionaryValue)
+      return try #require(envelope.dictionaryValue?["result"]?.dictionaryValue)
     }
     for version: String? in [nil, "2025-03-26", "2025-06-18", "2025-11-25"] {
       let structured = version == "2025-06-18" || version == "2025-11-25"
@@ -43,22 +53,22 @@ struct MCPContractTests {
             "name": "connection_check", "arguments": [:],
             "_meta": ["io.modelcontextprotocol/protocolVersion": "2025-11-25"],
           ]))
-      check((called["structuredContent"] != nil) == structured)
-      check(called["isError"] == false)
+      #expect((called["structuredContent"] != nil) == structured)
+      #expect(called["isError"] == false)
       let listing = try result(await request("tools/list", version: version))
-      let tools = try require(listing["tools"]?.arrayValue)
+      let tools = try #require(listing["tools"]?.arrayValue)
       for tool in tools {
-        let object = try require(tool.dictionaryValue)
-        check((object["outputSchema"] != nil) == structured)
+        let object = try #require(tool.dictionaryValue)
+        #expect((object["outputSchema"] != nil) == structured)
       }
-      let edit = try require(
+      let edit = try #require(
         tools.first { $0.dictionaryValue?["name"] == "reminders_edit" }?.dictionaryValue)
-      let schema = try require(edit["inputSchema"]?.dictionaryValue)
-      let properties = try require(schema["properties"]?.dictionaryValue)
-      let changes = try require(
+      let schema = try #require(edit["inputSchema"]?.dictionaryValue)
+      let properties = try #require(schema["properties"]?.dictionaryValue)
+      let changes = try #require(
         properties["changes"]?.dictionaryValue?["properties"]?.dictionaryValue)
-      check(changes["due"]?.dictionaryValue?["properties"]?.dictionaryValue?["date"] != nil)
-      check(
+      #expect(changes["due"]?.dictionaryValue?["properties"]?.dictionaryValue?["date"] != nil)
+      #expect(
         changes["clear"]?.dictionaryValue?["items"]?.dictionaryValue?["enum"]?.arrayValue == [
           "notes", "due", "start", "url", "location",
         ])
@@ -69,9 +79,24 @@ struct MCPContractTests {
             "name": "reminders_fetch",
             "arguments": ["query": ["listIDs": ["fixture"], "due": "today"]],
           ]))
-      check(fetched["isError"] == false)
+      #expect(fetched["isError"] == false)
+      for name in ["mail_accounts", "notes_accounts", "ble_devices"] {
+        let response = try result(
+          await request(
+            "tools/call", version: version, params: ["name": .string(name), "arguments": [:]]))
+        #expect(response["isError"] == false)
+        #expect((response["structuredContent"] != nil) == structured)
+      }
+      let rejected = try result(
+        await request(
+          "tools/call", version: version,
+          params: [
+            "name": "ble_write",
+            "arguments": ["characteristicID": .string(UUID().uuidString), "base64": "bad!"],
+          ]))
+      #expect(rejected["isError"] == true)
     }
-    check(try await request("tools/list", version: "unsupported").status == .badRequest)
+    #expect(try await request("tools/list", version: "unsupported").status == .badRequest)
     for version in ["2025-03-26", "2025-11-25"] {
       let initialized = try result(
         await request(
@@ -80,7 +105,7 @@ struct MCPContractTests {
             "protocolVersion": .string(version), "clientInfo": ["name": "fixture", "version": "1"],
             "capabilities": ["experimental": ["codex/auth-change": [:]]],
           ]))
-      check(initialized["protocolVersion"] == .string(version))
+      #expect(initialized["protocolVersion"] == .string(version))
     }
   }
 }

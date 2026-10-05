@@ -12,18 +12,18 @@ struct ReminderTests {
       AppleDate(date: "2026-10-03", time: "20:45:00"),
     ] {
       let components = try date.components()
-      check(AppleDate(components: components) == date)
+      #expect(AppleDate(components: components) == date)
       let data = try JSONEncoder().encode(date)
-      check(try JSONDecoder().decode(AppleDate.self, from: data) == date)
+      #expect(try JSONDecoder().decode(AppleDate.self, from: data) == date)
       let json = try JSONDictionary(encoding: date)
-      check(Set(json.keys).isSubset(of: ["date", "time", "timeZone"]))
+      #expect(Set(json.keys).isSubset(of: ["date", "time", "timeZone"]))
     }
     let day = try AppleDate(date: "2028-02-29").components()
-    check(day.hour == nil && day.timeZone == nil)
+    #expect(day.hour == nil && day.timeZone == nil)
     let zoned = try AppleDate(
       date: "2026-10-03", time: "20:45:00", timeZone: "America/New_York"
     ).components()
-    check(zoned.day == 3 && zoned.hour == 20 && zoned.timeZone?.identifier == "America/New_York")
+    #expect(zoned.day == 3 && zoned.hour == 20 && zoned.timeZone?.identifier == "America/New_York")
   }
 
   @Test func rejectsMalformedDatesAndDSTGaps() async throws {
@@ -63,30 +63,30 @@ struct ReminderTests {
     await expectFailure {
       try await dispatcher.call("reminders_delete", arguments: ["id": "target", "force": true])
     }
-    check(await service.writes.isEmpty)
+    #expect(await service.writes.isEmpty)
   }
 
   @Test func serviceGatesPatchesAndMoves() async throws {
     let service = FakeReminders()
     let dispatcher = ToolDispatcher(testReminders: service)
-    check(await dispatcher.tools().count == 12)
+    #expect(await dispatcher.tools().count == 12)
     _ = try await dispatcher.call(
       "reminders_edit",
       arguments: ["id": "exact-item", "changes": ["completed": true, "clear": ["due"]]])
-    let changes = try require(await service.lastChanges)
-    check(changes.completed == true && changes.title == nil && changes.notes == nil)
-    check(changes.due == nil && changes.clear == [.due])
+    let changes = try #require(await service.lastChanges)
+    #expect(changes.completed == true && changes.title == nil && changes.notes == nil)
+    #expect(changes.due == nil && changes.clear == [.due])
     let moved = try await dispatcher.call(
       "reminders_move", arguments: ["id": "exact-item", "listID": "destination"])
     let result = try JSONDictionary(encoding: moved)
-    check(result["id"] == "moved-id" && result["listID"] == "destination")
-    check(await service.writes == ["edit:exact-item", "move:exact-item:destination"])
+    #expect(result["id"] == "moved-id" && result["listID"] == "destination")
+    #expect(await service.writes == ["edit:exact-item", "move:exact-item:destination"])
     await service.setAvailable(false)
-    check(await dispatcher.tools().map(\.name) == ["connection_check"])
+    #expect(await dispatcher.tools().map(\.name) == ["connection_check"])
     for name in ["reminders_get", "reminders_delete", "reminders_move"] {
       await expectFailure { try await dispatcher.call(name, arguments: ["id": "exact-item"]) }
     }
-    check(await service.writes.count == 2)
+    #expect(await service.writes.count == 2)
     await service.setAvailable(true)
     await service.setFailure(ToolFailure("read_only", "Fixture read-only account"))
     for name in ["reminders_delete", "reminders_move"] {
@@ -95,7 +95,7 @@ struct ReminderTests {
       do {
         _ = try await dispatcher.call(name, arguments: arguments)
         Issue.record("A failed mutation must not return success")
-      } catch let error as ToolFailure { check(error.code == "read_only") }
+      } catch let error as ToolFailure { #expect(error.code == "read_only") }
     }
   }
 
@@ -113,11 +113,11 @@ struct ReminderTests {
         try await dispatcher.call("reminders_fetch", arguments: ["query": .object(query)])
       }
     }
-    check(await service.reads == 0)
+    #expect(await service.reads == 0)
     _ = try await dispatcher.call(
       "reminders_fetch", arguments: ["query": ["listIDs": ["list"], "due": "today"]])
-    check(await service.lastQuery?.completed == false)
-    check(await service.reads == 1)
+    #expect(await service.lastQuery?.completed == false)
+    #expect(await service.reads == 1)
   }
 
   @Test func datePresetsSearchSortingAndPagination() throws {
@@ -147,20 +147,20 @@ struct ReminderTests {
       )
       .resolve(now: now).page(records)
     }
-    check(try page(.today).reminders.map(\.id) == ["today", "past-time"])
-    check(try page(.overdue).reminders.map(\.id) == ["past-day", "past-time"])
-    check(try Set(page(.upcoming).reminders.map(\.id)) == ["tomorrow", "midnight"])
-    check(try page(.undated).reminders.map(\.id) == ["undated"])
+    #expect(try page(.today).reminders.map(\.id) == ["today", "past-time"])
+    #expect(try page(.overdue).reminders.map(\.id) == ["past-day", "past-time"])
+    #expect(try Set(page(.upcoming).reminders.map(\.id)) == ["tomorrow", "midnight"])
+    #expect(try page(.undated).reminders.map(\.id) == ["undated"])
     let first = try page(.any, limit: 2)
     let second = try page(.any, offset: 2, limit: 2)
-    check(first.total == 7 && first.nextOffset == 2 && second.nextOffset == 4)
-    check(Set(first.reminders.map(\.id)).isDisjoint(with: second.reminders.map(\.id)))
-    check(try page(.any, offset: 100).reminders.isEmpty)
-    check(try page(.any).reminders.last?.id == "undated")
+    #expect(first.total == 7 && first.nextOffset == 2 && second.nextOffset == 4)
+    #expect(Set(first.reminders.map(\.id)).isDisjoint(with: second.reminders.map(\.id)))
+    #expect(try page(.any, offset: 100).reminders.isEmpty)
+    #expect(try page(.any).reminders.last?.id == "undated")
     let multiple = try ReminderQuery(listIDs: ["list", "other"], completed: true)
       .resolve(now: now, defaultTimeZone: zone).page(records)
-    check(multiple.reminders.map(\.id) == ["completed"])
-    check(multiple.timeZone == zone.identifier)
+    #expect(multiple.reminders.map(\.id) == ["completed"])
+    #expect(multiple.timeZone == zone.identifier)
   }
 
   @Test func nativeCalendarConversionAndFallBoundary() throws {
@@ -171,7 +171,7 @@ struct ReminderTests {
     native.month = 10
     native.day = 3
     native.hour = 9
-    check(
+    #expect(
       AppleDate(components: native)
         == AppleDate(date: "2026-10-03", time: "09:00:00", timeZone: "GMT"))
     let now = ISO8601DateFormatter().date(from: "2026-11-01T17:00:00Z")!
@@ -189,16 +189,16 @@ struct ReminderTests {
       listIDs: ["list"], search: "needle", due: .today, timeZone: "America/New_York"
     )
     .resolve(now: now).page([late, future, undated])
-    check(today.reminders.map(\.id) == ["late"])
+    #expect(today.reminders.map(\.id) == ["late"])
     let sorted = try ReminderQuery(listIDs: ["list"], sort: .due).resolve(now: now).page([
       undated, future,
     ])
-    check(sorted.reminders.map(\.id) == ["future", "undated"])
+    #expect(sorted.reminders.map(\.id) == ["future", "undated"])
   }
 
   @Test func disabledEventKitNeverReadsData() async {
     let service = await EventKitReminders()
-    check(await !service.available)
+    #expect(await !service.available)
     await expectFailure { try await service.lists() }
     await expectFailure { try await service.get(id: "disposable-nonexistent") }
     await expectFailure { try await service.delete(id: "disposable-nonexistent") }

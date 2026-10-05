@@ -1,6 +1,6 @@
 # Third-party notices
 
-The app is original SwiftUI/EventKit application code. iMCP informed the initial product inventory; no iMCP implementation, networking, identity, or branding assets are included.
+Original iMCP-HTTP application code is licensed under Apache-2.0; see LICENSE and NOTICE. iMCP informed the initial product inventory; no iMCP implementation, networking, identity, or branding assets are included.
 
 ## Runtime dependencies
 
@@ -9,7 +9,7 @@ The app is original SwiftUI/EventKit application code. iMCP informed the initial
 - Apple [SwiftNIO 2.103.0](https://github.com/apple/swift-nio/tree/2.103.0), Apache-2.0. NIOPosix supplies the listener's scoped event loop; already a transitive HTTP dependency.
 - Apple [swift-http-types 1.8.0](https://github.com/apple/swift-http-types/tree/1.8.0) and [swift-log 1.15.1](https://github.com/apple/swift-log/tree/1.15.1), Apache-2.0. Used directly for HTTP fields and a no-op logger.
 
-`Package.resolved` records exact revisions of direct and transitive dependencies. Their original license/notice files remain in SwiftPM checkouts; `build-app.sh` includes their top-level license/notice files in the bundle's `Contents/Resources/Licenses`. Review notices again before distributing a release.
+`Package.resolved` records exact revisions of direct and transitive dependencies. Their original license/notice files remain in SwiftPM checkouts. `build-app.sh` packages notices for the locked graph, including component license files under `Sources/`, in `Contents/Resources/Licenses`. Additional BoringSSL, uSHET, and WIDE Project notices are retained in [LICENSES/](LICENSES/README.md). The bundle also carries the application LICENSE, NOTICE, this file, and the lockfile. Review attribution whenever dependencies change.
 
 ## Adapted source
 

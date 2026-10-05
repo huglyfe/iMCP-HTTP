@@ -1,90 +1,75 @@
 # iMCP-HTTP
 
-A native Mac app that gives approved AI clients access to Apple services over MCP Streamable HTTP. One process, one normal Mac window, and a persistent menu-bar icon. Closing the window keeps the server running; Quit stops it.
+A native Mac app that gives approved AI clients access to Apple services through a local HTTP MCP server. One window manages services, individual tools, and connections; a compact menu-bar panel keeps the server within reach.
 
-**Development implementation:** loopback HTTP, macOS-authenticated OAuth approval, durable client grants, pause/revoke, and native Reminders, Calendar, Contacts, Maps, and read-only Photos metadata tools. Real Codex login, fixture tool calls, restart, and revocation are tested. OpenCode dynamic registration and OAuth login are also tested. The native approval flow was verified through macOS authentication, OAuth exchange, connection check, refresh, deny, and revoke. Remaining window/menu checks, macOS data-permission prompts, and disposable Apple-service writes still need manual acceptance. This repository remains private.
+**Public alpha candidate: 0.5.0-alpha.1.** Build from source on macOS 15 or later. APIs and saved-state formats may change. Bundles are ad-hoc signed development apps; notarized downloads and automatic updates are not provided. BLE, Mail, and Notes have automated fixture coverage but still need native hardware/app acceptance.
 
-## Develop
+## Build and run
 
-Requires macOS 15+ and Swift 6.2+ with Swift Testing and `swift format` (full Xcode required with SDKs that ship SwiftUI macros).
+Install full Xcode with Swift 6.2 or later, complete Xcode's first-launch setup, and have Python 3 on PATH. Command Line Tools alone are insufficient for SDKs that require SwiftUI macros.
 
 ```sh
+git clone https://github.com/huglyfe/iMCP-HTTP.git
+cd iMCP-HTTP
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 ./scripts/check.sh
+./scripts/build-app.sh release
 open dist/iMCP-HTTP.app
 ```
 
-If Command Line Tools are selected, run checks with `DEVELOPER_DIR` pointing to the installed full Xcode developer directory. This selects the toolchain for that command without changing the system setting.
+Adjust `DEVELOPER_DIR` if Xcode is installed elsewhere. Checks build a separate bundle under `.build/check/`, so they do not overwrite the app you use. Quit the normal app before rebuilding it. Rebuilding an ad-hoc signed app may require macOS permission approval again.
 
-Use `./scripts/build-app.sh release` for an optimized development bundle. Bundles are ad-hoc signed, unsandboxed development apps under ignored `dist/`, not notarized releases. Apple data access remains governed by macOS permission and the app's service switch. Production signing and permission persistence across upgrades are release gates.
+## Connect a client
 
-## Connect Codex
-
-Start the app, then:
+The server listens only on `http://127.0.0.1:18765/mcp`. For Codex on the same Mac:
 
 ```sh
 codex mcp add imcp-http --url http://127.0.0.1:18765/mcp
 ```
 
-The add command starts login automatically. Approve the pending request in Connections or the menu-bar panel, then authenticate with macOS. Clients register automatically using standard OAuth Dynamic Client Registration, then use PKCE and native approval. No client secret or manual token is needed. Names identify requests for display only; approve a login you initiated.
+The command starts OAuth login. Approve your pending request in the app, then authenticate with macOS. Approve only a login you initiated: the displayed client name is not proof of application identity. No manual token or client secret is needed.
 
-Setup has a searchable alphabetical directory for ChatGPT, Claude Code, Claude Desktop, Codex, Cursor, Gemini CLI, OpenCode, VS Code, Windsurf, and Zed. Each entry includes vendor documentation and verification status. Local-client recipes use the current endpoint; hosted connector entries explain why they cannot reach this Mac directly. No client configuration or tunnel is installed automatically.
+Enable the services you want in **Services** and accept their macOS permission prompts. All services start disabled. Each service also has individual tool switches, shared by every approved client. Approved clients can access the enabled capabilities across this Mac user's available accounts.
 
-Approval lasts until revoked. Tokens expire after 15 minutes and refresh without a new approval. The server switch pauses access; closing the window or menu panel keeps the app running. Revoke prevents subsequent calls and refresh. Existing calls may already have completed.
+Access persists until revoked. Tokens expire after 15 minutes and refresh automatically. Pause stops client access; closing the window keeps the server running; Quit stops it. Revoke blocks subsequent calls and refreshes but cannot undo work already started. Reconnect clients after changing tool availability to refresh discovery.
 
-Enable each service in Services and accept its macOS permission prompt when needed. The same page exposes individual tool switches. The compact menu panel retains its service switches. Disabled tools disappear from discovery and subsequent calls by name fail; all approved clients share these global choices. Approved clients share access across this Mac user's available accounts. Photos uses PhotoKit without opening Photos.app; its tools read metadata only. Maps uses supplied locations and does not request device location. Reconnect clients after changing services or tools to refresh their tool list. There is no per-list policy editor.
+**Setup** includes recipes and verification status for other clients. Codex login/tools/restart/revoke and OpenCode registration/login have fixture acceptance. Hosted ChatGPT and Claude connectors cannot reach this loopback endpoint directly; remote exposure is outside this alpha.
 
-## Tools
+## Services
 
-39 typed tools are implemented. Discovery includes only enabled, available services. Reads return compact JSON summaries; get and mutations return detail; deletion returns `{deleted, id}`. Exact identifiers target writes. No prose success envelopes or implicit default accounts.
+68 typed tools are implemented. Discovery shows only enabled, available capabilities. Fetches return compact summaries; get and mutations return details; deletion returns `{deleted, id}`. Writes use exact identifiers and explicit destinations.
 
 | Service | Operations |
 | --- | --- |
 | Connection | `connection_check`, with no Apple access |
-| Reminders | Accounts; list/create/rename/delete lists; fetch/get/create/edit/move/delete reminders; completion, date ranges, URLs, start dates, display alarms, recurrence |
-| Calendar | Accounts; list/create/rename/delete calendars; fetch/get/create/edit/move/delete exact occurrences; all-day events, recurrence, alarms, availability |
-| Contacts | Accounts; search/get/create/edit/delete individual cards; names, organizations, labeled values, addresses, birthdays; groups and membership |
-| Photos | Album discovery; date/media/favorite-filtered asset metadata; exact asset metadata. No image export, iCloud media download, or hidden assets |
-| Maps | Place/address search; driving/walking distance and travel time; optional instructions |
+| Reminders | Accounts, lists, search/read/create/edit/move/delete, completion, dates, alarms, recurrence |
+| Calendar | Accounts, calendars, search/read/create/edit/move/delete exact occurrences, all-day events, recurrence, alarms |
+| Contacts | Accounts, search/read/create/edit/delete individual cards, groups and membership |
+| Photos | Albums and filtered asset metadata; no image export or hidden assets |
+| Maps | Place/address search, driving/walking routes and travel time using supplied locations |
+| Bluetooth LE | Scan/connect/disconnect, GATT discovery, base64 read/write, notification/indication subscriptions and cursor polling |
+| Mail | Accounts/mailboxes, message search/read, read/flag edits, move/delete, mailbox create/rename; no send/draft tools |
+| Notes | Accounts/folders, search/read/create, HTML replacement, plain-text append, move/delete |
 
-Example arguments:
+Mail and Notes use the apps' public scripting dictionaries and require Automation permission; those apps may launch and synchronize. BLE uses CoreBluetooth, shares connections/subscriptions across clients, and releases them on pause, disable, or quit. No device-specific protocol is assumed.
 
-```json
-{"query":{"listIDs":["<list-id>"],"due":"overdue","timeZone":"America/New_York","sort":"due"}}
-```
+See [tool contracts](docs/REQUIREMENTS.md#common-tool-contract) for fields, pagination, dates, clearing, and native limitations. For example, `reminders_edit` preserves omitted fields:
 
 ```json
 {"id":"<reminder-id>","changes":{"completed":true,"clear":["due"]}}
 ```
 
-```json
-{"id":"<event-id>","start":"2026-10-03T13:00:00Z","span":"thisEvent","changes":{"title":"Updated title"}}
-```
+## Alpha limitations and verification
 
-```json
-{"accountID":"<contacts-account-id>","search":"Alex","limit":10}
-```
+- BLE hardware/GATT behavior and native Mail/Notes permission/CRUD workflows remain unverified. Use identifiable disposable devices and items for acceptance.
+- Reminders, Calendar, Contacts, and Photos have partial native acceptance; complete edit/move/delete, cleanup, account restrictions, and permission persistence still need verification. Live Maps results, sleep/wake, and enabled-service memory behavior also remain open.
+- Apple may reject writes or normalize content. An interrupted mutation can have an uncertain outcome; inspect saved state before retrying. Native deletion follows the app/account's retention rules.
+- There is one current settings/grant format and no automatic migration guarantee during alpha. No remote listener, per-client tool policy, background daemon, or private Apple database access is included.
 
-See [tool contracts](docs/REQUIREMENTS.md#common-tool-contract) for fields, dates, recurrence, clearing, pagination, and native limitations. This development revision uses one current settings and grant-store format; no legacy migration is provided. Location, Shortcuts, Weather, Messages/Phone, and Capture remain future slices; the [prior-art review](docs/INSPIRATION.md#coverage-and-remaining-boundaries) records their API/permission constraints.
+Automated checks use fake service data, isolated temporary state, a real loopback HTTP listener, and fixed script fixtures. They do not read or mutate personal Apple records, initialize the Bluetooth radio, or call live Maps. Native acceptance is tracked separately in the [plan](docs/PLAN.md#native-acceptance).
 
-## Verification
+## Development
 
-The canonical check runs fixture tests, a real HTTP listener test, formatting, build, bundle metadata/signature, and whitespace checks. Automated tests never read or write real Apple records or call live Maps.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for focused tests, formatting, client fixtures, and isolated manual runs. The [architecture](docs/ARCHITECTURE.md), [requirements](docs/REQUIREMENTS.md), [plan](docs/PLAN.md), and [prior-art review](docs/INSPIRATION.md) describe implementation boundaries and remaining work.
 
-Optional real-client acceptance requires `codex`, `opencode`, and `python3` on PATH and access to the local keyring:
-
-```sh
-IMCP_RUN_CLIENT_ACCEPTANCE=1 ./scripts/check.sh
-```
-
-The fixtures use standard dynamic registration, isolated temporary state, and the native decision API, with no model turns or production client configuration changes. Codex tests all five services against fake data, restart, and revocation, then logs out its unique test credential. OpenCode tests registration/login and verifies that the server saved the resulting grant. OpenCode tool/restart/revoke acceptance remains unverified: its status command alone does not prove fresh authorized access. Separate approval-boundary tests inject a fake authenticator and cover cancellation, expiry, denial, duplicate prompts, and late success after pause/restart. These tests do not verify native authentication or UI clicks. Listener tests use ports 19765 and 19767.
-
-For isolated manual acceptance, launch the bundle executable with `IMCP_HTTP_DATA_DIR` set to a temporary directory and `IMCP_HTTP_PORT` set to another loopback port. Keep these development overrides out of production launch configuration.
-
-## Project map
-
-- [Plan](docs/PLAN.md): scope, progress, and remaining acceptance gates.
-- [Architecture](docs/ARCHITECTURE.md): SDK choice, ownership, protocol and storage.
-- [Requirements](docs/REQUIREMENTS.md): behavior and tool contracts.
-- [Prior art](docs/INSPIRATION.md) and [agent guide](AGENTS.md).
-
-MIT licensed application code; dependencies retain their licenses. See [third-party notices](THIRD_PARTY_NOTICES.md). Independent of iMCP and Apple; no hosted account or subscription.
+Original application code is licensed under [Apache-2.0](LICENSE). Dependencies and adapted code retain their original licenses; see [third-party notices](THIRD_PARTY_NOTICES.md). This project is independent of iMCP and Apple.

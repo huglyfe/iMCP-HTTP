@@ -1,111 +1,64 @@
-# Initial implementation plan
+# Implementation plan
 
-Agreed 2026-10-02; implementation updated 2026-10-04. Completed code and verified behavior are distinguished below.
+Originally agreed 2026-10-02. This is the maintained implementation and acceptance plan for public source alpha candidate **0.5.0-alpha.1**. It records current behavior; superseded UI directions and machine-specific operational history are omitted.
 
-## Progress
+## Product and settled decisions
 
-- Approved 2026-10-04 slice: normal single-window app with persistent menu-bar controls, macOS-authenticated OAuth approvals, and focused acceptance/cleanup. No new services, BLE, network access, signing setup, or AppleScript adapters in this slice. Earlier menu-bar-only decisions below are historical and superseded.
-- Implemented the normal window with a native Services/Connections/Setup strip below the title bar, one content area, and the familiar compact menu. Services shows its shared-controls note first; Connections/Setup omit explanatory footers; Revoke is red. The owner rejected the sidebar redesign and enclosing tab border, and both were removed.
-- Each new approval uses a fresh LocalAuthentication context. One optional attempt value ties authentication to the exact request and rejects stale results. OAuth exchanges and grants remain unchanged; all Quit routes await listener shutdown.
-- Initial app/authentication milestone passed 51 tests, formatting, build, and bundle/signature validation. Real Codex fixture tools/restart/revoke and OpenCode registration/login passed. Computer use recovered and verified navigation, client search, and the single-container layout. The owner completed macOS authentication twice; PKCE exchange, connection_check, refresh, native revoke, rejection after revoke, and native Deny passed. Both temporary grants were revoked; no Apple records were accessed.
-- The owner accepted the final UI. Native inspection verified the final tab contents, including the single Codex setup command. Window close/reopen preserved the listener, and Command-Q released it.
-- Login follow-up: removed the one-second browser reload in favor of quiet status checks and a stable approval URL. Page refresh preserves one request; errors offer retry or restart guidance; decisions near expiry keep a full callback window. Expired or consumed links show a readable end-of-request page. Codex setup now shows only `mcp add`, verified to start and finish login automatically in isolated configuration. All 55 tests and canonical checks pass. Live browser rendering, manual refresh without duplicate approval, and native Deny/validated callback passed. The owner's saved Codex connection was preserved. Final relaunch and visual inspection of the expired-link page were blocked by the locked Mac; the rebuilt bundle is ready to open.
+iMCP-HTTP is a small native SwiftUI app giving approved AI clients access to Apple services. One process owns the window, persistent compact menu, loopback HTTP listener, OAuth, and Apple permissions. Closing the window keeps the server running; Quit stops it. The HTTP core remains independent of SwiftUI.
 
-- Implemented in the private draft: SwiftMCP + Hummingbird, loopback MCP, native OAuth consent, durable grants, refresh rotation, revoke, pause/start, and working service controls.
-- Version 0.4.0 expands to 36 typed tools: connection check; Reminders account/list/item management, search/date ranges, start/URL/location/time alarms/recurrence; Calendar account/calendar/occurrence management; Contacts card/group management; Maps search/routes.
-- Clean tool contracts: explicit write targets, compact fetch summaries, detail on get, saved records on writes, no prose success envelope. iMCP, apple-reminders-mcp, and remindctl source review is recorded in INSPIRATION.
-- Automated checks cover service gates, strict input/patch/date/recurrence validation, native value mapping, explicitly disabled defaults, OAuth/HTTP, and SDK schemas. The opt-in Codex fixture exercises all five services with fake data, restart, and revocation. The OpenCode fixture proves dynamic registration/login and a persisted grant; its tool/restart/revoke acceptance remains pending.
-- Remaining release gates: native authentication cancellation/retry, menu Open/pause/start/Quit, macOS permission flows, disposable records and cleanup, live Maps results, signing/permission persistence, sleep/wake, and memory under enabled-service workloads. Fixture tests do not replace the remaining native acceptance.
-- Added three read-only Photos metadata tools through PhotoKit; 39 tools across five services. Photos is disabled until explicitly selected. Replaced UI polling with authorization snapshots and an approval-expiry timer. Lean Reminders fetch snapshots omit detail arrays and unused notes; full native fetch before pagination remains an EventKit constraint.
-- Owner chose direct frameworks and deferred automation. Mail/Notes/Music AppleScript adapters are not being added. WeatherKit/MusicKit require signing/capability proof; Messages/Phone private-store access and HomeKit’s Catalyst requirement need separate decisions. Location and Capture remain direct-framework candidates. No production integration cutover or public release.
-- Corrected UI direction: iMCP-style menu-bar-only app (no Dock icon or main window), compact service controls, Settings with global individual-tool switches and client management. The earlier window scaffold diverged from the intended outer shape; the HTTP/OAuth core remains independent.
-- Owner direction: independent clean application design, broad Apple coverage, simple parameters and minimal JSON results; no iMCP compatibility obligation.
+- Streamable HTTP on loopback, standard OAuth authorization-code flow with PKCE, native macOS approval, and revocable durable grants.
+- Explicit global service and individual-tool choices shared by all approved clients. Access spans the Mac user's available accounts, with no per-list or per-client policy editor.
+- Native frameworks own Apple data. Mail/Notes use their public scripting dictionaries; BLE exposes generic GATT operations with no target device or vendor protocol.
+- Compact typed results, explicit identifiers/destinations, saved mutation records, and no automatic retry of uncertain writes.
+- Apache-2.0 original application code with retained third-party notices. Source publication and signed/notarized binary distribution are separate milestones.
+- Remote exposure, daemons/proxies, private Apple stores, multi-user hosting, and a plugin marketplace are outside this alpha.
 
-- Cleanup slice: implemented-service inventory only; service settings use a set; stateless validation belongs to tool handlers and native alarm/recurrence values are prepared once. AppRuntime has explicit startup failure categories, cancellable lifecycle ownership, and direct fixture tests.
-- Final cleanup review: fixed listener-task retention of AppRuntime, with an owner-release regression test. Scoped the HTTP listener to one event loop using the existing SwiftNIO dependency. Isolated release measurements cover disabled-service idle behavior and concurrent metadata requests; Apple-data workload measurements remain pending.
-- UI refinement: removed the home subtitle and setup-command button; added distinct service colors and an alphabetical searchable directory of ten clients. Vendor docs inform recipes; verified and unverified clients remain distinct.
-- Settings refinement: removed service status footers and grouped read-only tools before write tools, with both kinds labeled from existing tool metadata.
-- Owner confirms there are no existing grants and requests a clean forward design. Removed the fixed Codex registration and legacy settings/store decoding. All clients now use bounded RFC 7591 public registration plus native approval and PKCE; no client-specific OAuth exchanges, production integration changes, or remote exposure.
+## Implementation milestones
 
-## Product
+| Original milestone | Implemented result | Remaining evidence |
+| --- | --- | --- |
+| OAuth/transport feasibility | SwiftMCP + Hummingbird; standard dynamic registration, PKCE, protected-resource metadata and per-request authorization | OpenCode tool/restart/revoke acceptance |
+| Reminders vertical slice | Account/list/item management, date filters, completion, alarms, recurrence and exact write targets | Complete native edit/move/delete, account restrictions and cleanup |
+| Durable approval/app controls | Atomic grants/settings, refresh rotation, revoke, pause, single window/menu and macOS authentication | Native authentication cancellation/retry, signing and permission persistence |
+| Apple-service coverage | 68 tools across Reminders, Calendar, Contacts, Maps, Photos metadata, BLE, Mail and Notes | Native acceptance by service below |
+| Source alpha preparation | Apache-2.0, contributor workflow, pinned builds, dependency notices, isolated check bundles and public-facing documentation | GitHub CI on the final commit and explicit publication decision |
 
-iMCP-HTTP is a small native SwiftUI app giving approved AI clients access to Apple services. The primary user is the owner; Codex on the same Mac is the first client. Use proven libraries and native Apple frameworks with clear application, authorization, and dispatch ownership. iMCP is a product reference, not an architectural dependency.
+Bluetooth pending operations use an enum. A first request waits up to 15 seconds for the manager to leave its initial unknown/resetting state; radio-off fails explicitly. Pause/disable/cancellation ends pending work and invalidates handles. Mail and Notes share one `AutomationRunner` owned by `AppRuntime`; separate runtime instances have independent execution slots. Tool contracts remain unchanged.
 
-The latest repository instruction is private creation. Keep the code suitable for open-source release from the start; publish only on a subsequent explicit instruction.
+## Verification boundary
 
-## Settled decisions
+Local alpha preparation passed the canonical checks: 74 tests (11 app/runtime and 63 core), formatting, repository metadata/links, debug build, bundle resources/notices, and signature validation. A fresh source-only tree independently passed the same workflow and an optimized release build. A targeted review of all 11 existing local commits found no matching credential or machine-path patterns; this is not a comprehensive secret audit. Build-tool smoke checks verified running-target preservation and invalid-output rejection. GitHub visibility remains private; no release or production cutover was performed. Hosted CI for the final changes remains pending.
 
-- Streamable HTTP inside the app; loopback only for the first release.
-- OAuth authorization-code flow with PKCE, native owner approval, and approval until revoked.
-- Separate credentials for each client grant. Account-wide capabilities shared across approved clients; no per-list or per-client tool policy editor.
-- Global service enablement remains explicit and subject to macOS permissions.
-- Reminders editing and deletion are the first tool additions. Existing fetch/create behavior must become reliable enough to target those operations.
-- Intended initial inventory: Reminders, Calendar, Contacts, Photos, Location, Maps, Mail, Notes, Music, Messages, Phone, Home, Podcasts, News, Shortcuts, Weather, Capture, Utilities. Each adapter ships only after its requirements and availability are verified.
-- Normal Mac app with one resizable window, Dock icon, and persistent compact menu-bar panel. Services, Connections, and Setup live in the window; closing it keeps the runtime alive. Native macOS authentication gates each new OAuth approval. No new service in this slice.
-- Later ambition is broad Mac integration. Remote networking, computer control, native Reminders tags/subtasks, a plugin marketplace, and multi-user hosting are not first-release requirements.
+Canonical checks cover authorization/persistence, real loopback HTTP, authenticated MCP contracts for every supported protocol version, strict validation, fixture/native value mapping, runtime ownership, cancellation and permission gates. Script fixtures compile fixed scripts and execute only pure helpers; BLE fixtures never initialize a radio manager. New tests cover runner contention/isolation, error/cancellation cleanup, and bounded BLE initialization through transient states.
 
-## Bootstrap (completed before implementation)
+Prior real-client fixtures verified Codex registration/login, five fake services, restart and revoke; OpenCode registration/login and saved grants passed. Prior manual acceptance verified native approval success, OAuth exchange/refresh, Deny/revoke, window close/reopen and Quit. These are distinct from current automated evidence and do not establish native Apple CRUD completeness.
 
-- Swift 6 package with native SwiftUI app and a Foundation-independent service inventory.
-- App bundling script, canonical check command, and macOS CI workflow.
-- No listener, auth implementation, Apple permissions, or fake working controls.
-- No third-party runtime dependencies until the implementation spike selects pinned versions.
+| Native service | Evidence | Still unverified |
+| --- | --- | --- |
+| Reminders, Calendar, Contacts | Discovery, disposable container/item creation and exact readback; Calendar range search | Complete edits/moves/deletes, recurrence/account restrictions and verified cleanup |
+| Photos | Album discovery and empty-library reads | Populated-library filters/paging, hidden exclusion and permission/restart behavior |
+| Maps | Validation, fixture results, live search and walking directions | Other travel modes |
+| BLE | Fixture state, validation and notification-buffer coverage | Permission flows, real peripherals/GATT, notification delivery and sleep/wake |
+| Mail | Script fixtures, native permission and discovery/fetch/get | Disposable mutations and cleanup |
+| Notes | Script fixtures, native shared-note fetch/get, disposable create/search/get/edit/append/move/delete with readback | Locked/attachment mutation rejection, cross-account moves; empty test folder cleanup |
 
-## Current slice acceptance, 2026-10-04
+Native permission persistence across rebuilt ad-hoc bundles, sleep/wake, and memory under enabled-service workloads remain open. Builds must not replace the running app. Use the contributor workflow and disposable fixtures below; record results without private account data.
 
-- Verify launch, a single window, Dock/Command-Tab, close/reopen, menu Open, pause/start, and all Quit routes. Closing UI must not stop the listener; Quit must release it.
-- In isolated state, start a standard OAuth request, approve with macOS authentication, and verify code exchange. Cancel authentication, retry, deny, expire a request, and pause during authentication; none may grant access accidentally. Verify password fallback on the owner’s Mac and normal remote-desktop workflow manually.
-- Preserve existing service/tool settings and grants. Verify the familiar service rows, read-only/write grouping, permission failure visibility, Setup search, and connection revoke. Keep the three tabs below the title bar with clear spacing.
-- Run `./scripts/check.sh` and opt-in client fixtures. Real native Apple-data, sleep/wake, and enabled-service memory acceptance remain distinct from fixture evidence.
-- BLE (first device: owner-provided Tenovi Pillbox with forthcoming protocol docs), signing-dependent services, and AppleScript services follow only after confirming this slice.
+Latest native smoke checks verified authorized connection, Calendar discovery/fetch/get and disposable-calendar deletion with fresh-list confirmation, Contacts discovery/fetch/get, Mail discovery/fetch/get, Notes account/folder discovery, Photos albums and an empty asset fetch, Maps search/walking directions, and BLE scanning. The prior Reminders process termination and Notes false not-found failures were diagnosed and repaired; installed-app verification is recorded below. The two calendars and two reminder lists from the earlier acceptance run were removed; fresh tool discovery and the Calendar UI confirmed the acceptance entries were absent. Photos asset get and BLE GATT operations still require suitable test data/hardware.
 
-## 1. OAuth and transport feasibility
+Diagnosis confirmed both fetch failures. The live Reminders stack stopped on the EventKit search queue at a Swift main-actor assertion inside the nested `compactMap` closure in `EventKitReminders.fetch`. A synthetic EventKit callback reproduced the assertion without reading saved reminders; explicitly marking the callback `@Sendable` made that fixture pass. Notes folder resolution and note counting succeeded, but `id of container of target` failed with AppleScript `-1728` on the existing shared note. A read-only copy of the fetch script succeeded when it reused the known folder ID. The general error mapping incorrectly presents that property failure as a missing target. Both repairs are now implemented: the EventKit completion explicitly uses Sendable isolation with a background-callback regression fixture, and Notes retains explicit folder context across reads and mutations. After reinstall and owner permission approval, the installed app passed completed, incomplete and combined Reminders fetches without termination, and Notes fetch/get against the previously failing shared note. A disposable Notes item passed create, search, get, HTML replacement, plain-text append, same-account move and delete, with exact folder and content readback. Native Notes UI independently confirmed the move and deletion. The note remains recoverable in Recently Deleted; the empty disposable destination folder remains because native UI automation timed out during cleanup. Authorized connection checks remained healthy afterward.
 
-The feasibility comparison selected SwiftMCP 1.13.0 core and Hummingbird 2.27.0. The released official Swift SDK rejects Codex object-valued experimental capabilities. SwiftMCP passed without a dependency fork. See architecture for the transport and native-consent boundaries.
+Service/tool switches now limit busy-state dimming to the affected service/tool while retaining runtime serialization and pointer blocking during updates. This prevents unrelated controls from dimming on every change. The reinstalled app also shows secondary guidance beneath the Mail and Notes service headings to keep their apps open; enablement opens them when needed. Canonical checks passed (77 tests: 11 app/runtime and 66 core), including background EventKit callback and shared-note folder-context regressions, formatting, repository checks, build and signature validation. Native caption presence is verified; visual confirmation of the brief switch-flash fix remains pending.
 
-Resolve: protocol/release version; HTTP server integration; local issuer scheme accepted by Codex and the chosen libraries; stable endpoint/port; client registration; callback matching; native consent handoff; token storage. Record the selected versions and decisions in architecture.
+## Release and later work
 
-The initial proof used a pre-registered Codex client. The current implementation uses RFC 7591 dynamic registration for local-client interoperability. CIMD remains deferred: do not fetch arbitrary client metadata URLs without a concrete requirement and defined validation policy.
+The source alpha can describe experimental integrations explicitly while native acceptance remains incomplete. It does not claim notarized distribution or production cutover readiness. Complete the publication checks in [CONTRIBUTING.md](../CONTRIBUTING.md#preparing-a-source-alpha), review the exact commit and GitHub CI, and obtain an explicit owner instruction before changing visibility or creating a release.
 
-Acceptance: real Codex discovers authorization metadata, completes PKCE-backed login with owner approval, and calls a harmless test tool; denial, wrong verifier, code reuse, wrong audience, missing token, and revoked access fail. No Apple data required for this spike.
+Later service candidates and API constraints are recorded in [INSPIRATION.md](INSPIRATION.md#coverage-and-remaining-boundaries). Add one complete service slice at a time. Mail/Notes search performance should be measured with disposable native data before adding batching or other optimization. No performance refactor is part of this cleanup.
 
-## 2. Reminders vertical slice
+## Native acceptance
 
-Introduce typed inputs/results and an EventKit adapter with an explicit concurrency owner. Implement list and item identifiers, fetch/create, edit, and delete. Use native EventKit identifiers as opaque handles; stale identifiers fail explicitly.
-
-Patch semantics must distinguish omitted fields from clearing values. Reject invalid dates and nonexistent or ambiguous targets; never silently redirect a write to the default list. Preserve date-only semantics. Start with title, notes, due date, priority, and list targeting; additional fields require their own proof.
-
-Acceptance: disposable reminder create -> edit -> independent readback in Reminders -> delete -> confirmed absence. Test invalid updates, stale IDs, account restrictions, and permission denial. Delete does not pretend success after an error; an interrupted write reports an uncertain outcome instead of retrying blindly.
-
-## 3. Durable approval and app controls
-
-Persist owner grants until revoked. Access credentials may expire and refresh without asking the owner again. Restart must preserve valid grants and revocations. Keep credential exchange and revocation atomic.
-
-Implement service toggles reflecting real macOS authorization, client details, and revoke. Names are display labels. New sensitive services are disabled until the owner enables them; existing approved clients then share the enabled account-wide capabilities.
-
-Acceptance: connect -> approve -> use -> restart -> reconnect -> revoke -> reject subsequent tool calls and refresh. Pause stops tool access. Closing the window or menu panel leaves the app available; Quit stops it.
-
-## 4. Bring across the iMCP suite
-
-Port one service at a time through the same dispatcher and authorization path. Review its permission ownership, licensing, return schema, failure behavior, and availability before enabling it. Do not retain Bonjour or stdio relay infrastructure simply because upstream has it.
-
-Messages/Phone may need selected-file access and non-EventKit libraries; WeatherKit may require developer capabilities. Keep unavailable services visibly unavailable. Avoid private APIs unless separately decided and documented.
-
-Acceptance: per-service read and permitted disposable write checks; disabled services cannot be invoked by name; protocol tools list matches actual implemented and enabled capability.
-
-## 5. Personal release, then publication
-
-Verify app identity, signing, entitlements, permission prompts, launch/reopen, sleep/wake, startup failure, and memory at idle. Choose update/distribution machinery only when needed. Public source release does not require finished notarized binaries.
-
-Publish only after owner approval of visibility. Keep original notices for imported code, review tracked files for private data, and describe supported clients and known limitations honestly.
-
-## First useful release gate
-
-Codex on this Mac logs in once, lists enabled tools, edits and deletes a disposable reminder, reconnects after app restart, and loses access after revoke. The existing production integrations are replaced only after this proof and explicit cutover authorization.
-
-## Native acceptance checklist
-
-Apple-service acceptance remains pending; fixture tests do not establish it. Native authentication success, refresh, revoke, and Deny have separate verified evidence above. Use an isolated app state directory/port and an isolated client entry, then remove that entry and revoke its grant when finished. Never run an automated test against the owner's reminder data.
+Apple-service acceptance is partial; fixture tests do not establish native behavior. Native authentication success, refresh, revoke, Deny, window close/reopen, and Quit have prior manual evidence. Recheck them when those paths change. Use an isolated app state directory/port and an isolated client entry, then remove that entry and revoke its grant when finished. Never run an automated test against the owner's reminder data.
 
 1. Verify global tool switches hide disabled tools and reject stale calls, persist across restart, and preserve service-level gating. Verify native Approve and Deny for separate login attempts, pause/start, window close/reopen, menu Open, and Quit. Confirm startup listens independently of presentation and the app has a Dock icon. Enable Reminders through the native macOS permission flow.
 2. Create two visibly named disposable lists in Reminders, for example `iMCP acceptance source <timestamp>` and `iMCP acceptance destination <timestamp>`. Discover their exact IDs; do not use an owner's existing list as an implicit target.
@@ -120,3 +73,12 @@ Apple-service acceptance remains pending; fixture tests do not establish it. Nat
 10. Enable Maps without Location access. Search a public address near explicit coordinates; check a known driving/walking route and optional instructions. Disable it and verify stale tool calls fail. No personal device location is needed.
 11. Restart and confirm each saved service preference. Confirm services absent from the saved enabled-service set remain disabled. Record exact outcomes, without account names, content, credentials, or screenshots of unrelated data.
 12. Enable Photos manually and verify albums, date/media/favorite filtering, metadata paging/get, hidden-asset exclusion, disabled-tool rejection, and restart preferences using identifiable disposable Photos assets. No native photo acceptance or permission request is performed by automated tests.
+
+## BLE, Mail, and Notes acceptance
+
+1. Build to a separate bundle with `IMCP_BUILD_APP_PATH` when the existing app is running; do not overwrite its signature during acceptance. Use temporary app state and a spare loopback port. Never reset production grants, services, or privacy settings as part of a test.
+2. Enable each new service explicitly. Verify allowed/denied Automation and Bluetooth prompts, persisted enablement, disabled tools, and stale-call rejection. Mail and Notes may launch and sync as part of enablement; OS permission dialogs require the owner when macOS demands it.
+3. With an identifiable disposable BLE peripheral, scan, connect, discover duplicate-UUID services/characteristics by distinct handles, read, write with/without response, subscribe, observe cursor polling and overflow, unsubscribe, and disconnect. Confirm radio-off, disconnect, timeout/cancellation, service-change invalidation, pause/restart, and power/sleep recovery. Do not send arbitrary bytes to an unknown nearby device.
+4. In a dedicated disposable Mail mailbox with a manually supplied test message, fetch/search/get, toggle read/flagged, move to another disposable mailbox, verify saved state independently in Mail, delete the message, and confirm native retention. Test renamed/stale mailbox IDs and account mismatch rejection. Delete the disposable mailboxes manually in Mail: its scripting dictionary does not provide reliable mailbox deletion.
+5. In a dedicated Notes folder, create a uniquely named disposable note, verify title/escaped text/HTML, search/get, replace HTML, append text, and move within the same account. Verify locked/attachment edit rejection without changing personal notes. Delete the disposable note, independently confirm the result, and remove the test folder manually. Do not infer cleanup or native acceptance from fixture tests.
+6. Permission or hardware blocks leave the implementation and automated evidence intact; record the specific unverified native operations without weakening access controls.

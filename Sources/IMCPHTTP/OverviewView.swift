@@ -28,6 +28,8 @@ struct OverviewView: View {
       Text("Services").font(.caption).foregroundStyle(.secondary)
       ForEach(AppleService.allCases) { service in
         ServiceRow(runtime: runtime, service: service)
+          .disabled(runtime.state != .running)
+          .opacity(runtime.state == .running ? 1 : 0.5)
       }
       if !runtime.approvals.isEmpty {
         Divider()
@@ -74,7 +76,9 @@ struct ServiceRow: View {
       )
       .toggleStyle(.switch).controlSize(.small)
       .tint(service.color)
-      .disabled(runtime.changingService != nil || runtime.changingTool != nil)
+      .disabled(runtime.changingService == service)
+      // Preserve unrelated switches' appearance while the runtime serializes changes.
+      .allowsHitTesting(runtime.changingService == nil && runtime.changingTool == nil)
     }
     .help(runtime.serviceStatus[service] ?? "Disabled")
   }
@@ -84,6 +88,9 @@ extension AppleService {
   var icon: String {
     switch self {
     case .photos: "photo"
+    case .bluetooth: "antenna.radiowaves.left.and.right"
+    case .mail: "envelope"
+    case .notes: "note.text"
     case .reminders: "list.bullet"
     case .calendar: "calendar"
     case .contacts: "person.crop.circle"
@@ -98,6 +105,9 @@ extension AppleService {
     case .contacts: .orange
     case .maps: .green
     case .photos: .purple
+    case .bluetooth: .indigo
+    case .mail: .cyan
+    case .notes: .yellow
     }
   }
 }

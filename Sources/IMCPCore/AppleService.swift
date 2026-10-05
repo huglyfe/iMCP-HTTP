@@ -5,12 +5,18 @@ public enum AppleService: String, CaseIterable, Codable, Identifiable, Sendable 
   case contacts
   case maps
   case photos
+  case bluetooth
+  case mail
+  case notes
 
   public var id: String { rawValue }
 
   public var title: String {
     switch self {
     case .photos: "Photos"
+    case .bluetooth: "Bluetooth LE"
+    case .mail: "Mail"
+    case .notes: "Notes"
     case .reminders: "Reminders"
     case .calendar: "Calendar"
     case .contacts: "Contacts"
