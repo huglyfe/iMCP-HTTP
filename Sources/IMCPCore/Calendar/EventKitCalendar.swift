@@ -84,7 +84,7 @@ public final class EventKitCalendar: AppleAccess, CalendarAccess {
     try requireAccess()
     let event = EKEvent(eventStore: store)
     event.calendar = try catalog.get(calendarID, writing: true)
-    try apply(changes, to: event)
+    try Self.apply(changes, to: event)
     return try save(event, span: .thisEvent)
   }
   func edit(id: String, start: Date, span: EventSpan, changes: EventChanges) throws -> EventRecord {
@@ -98,7 +98,7 @@ public final class EventKitCalendar: AppleAccess, CalendarAccess {
       checked.allDay = true
       try checked.validate()
     }
-    try apply(changes, to: event)
+    try Self.apply(changes, to: event)
     return try save(event, span: span.native)
   }
   func move(id: String, start: Date, span: EventSpan, calendarID: String) throws -> EventRecord {
@@ -122,17 +122,24 @@ public final class EventKitCalendar: AppleAccess, CalendarAccess {
     }
     return Self.record(event)
   }
-  private func apply(_ changes: EventChanges, to event: EKEvent) throws {
-    let start = try changes.start.map(NativeDates.parse)
-    let end = try changes.end.map(NativeDates.parse)
+  static func apply(_ changes: EventChanges, to event: EKEvent) throws {
+    var scheduledChanges = changes
+    if scheduledChanges.allDay == nil, event.isAllDay { scheduledChanges.allDay = true }
+    let schedule = changes.start == nil ? nil : try scheduledChanges.schedule()
     let options = try EventOptions(alarms: changes.alarms, recurrence: changes.recurrence)
     options.apply(to: event)
     if let title = changes.title { event.title = title }
-    if let timeZone = changes.timeZone { event.timeZone = TimeZone(identifier: timeZone) }
-    if let allDay = changes.allDay { event.isAllDay = allDay }
-    if let start, let end {
-      event.startDate = start
-      event.endDate = end
+    let allDay = changes.allDay ?? event.isAllDay
+    if let schedule {
+      // macOS rounds an end assigned while all-day up to the end of that day.
+      // Assign the exclusive boundaries as a timed event, then convert once.
+      event.isAllDay = false
+      event.timeZone = schedule.zone
+      event.startDate = schedule.start
+      event.endDate = schedule.end
+      event.isAllDay = allDay
+    } else if let allDay = changes.allDay {
+      event.isAllDay = allDay
     }
     if let notes = changes.notes { event.notes = notes }
     if let location = changes.location { event.location = location }
@@ -149,6 +156,15 @@ public final class EventKitCalendar: AppleAccess, CalendarAccess {
       }
     }
   }
+  private static func day(_ date: Date) -> String {
+    let parts = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: date)
+    return String(format: "%04d-%02d-%02d", parts.year!, parts.month!, parts.day!)
+  }
+
+  static func exclusiveEnd(_ event: EKEvent) -> Date {
+    event.isAllDay ? event.endDate.addingTimeInterval(1) : event.endDate
+  }
+
   static func record(_ event: EKEvent) -> EventRecord {
     let availability: EventAvailability?
     switch event.availability {
@@ -163,8 +179,14 @@ public final class EventKitCalendar: AppleAccess, CalendarAccess {
     return EventRecord(
       id: event.eventIdentifier, calendarID: event.calendar.calendarIdentifier,
       title: event.title ?? "", start: NativeDates.string(event.startDate),
-      end: NativeDates.string(event.endDate),
-      timeZone: event.timeZone?.identifier, allDay: event.isAllDay, notes: event.notes,
+      // macOS exposes all-day ends as the last second of the included day.
+      // The tool contract uses an exclusive boundary for every event.
+      end: NativeDates.string(
+        Self.exclusiveEnd(event)),
+      timeZone: event.timeZone?.identifier,
+      startDate: event.isAllDay ? Self.day(event.startDate) : nil,
+      endDate: event.isAllDay ? Self.day(Self.exclusiveEnd(event)) : nil,
+      allDay: event.isAllDay, notes: event.notes,
       location: event.location, url: event.url?.absoluteString, availability: availability,
       recurrence: event.recurrenceRules?.map(RepeatRule.init),
       alarms: alarms.isEmpty ? nil : alarms,

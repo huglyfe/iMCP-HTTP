@@ -69,8 +69,9 @@ final class CalendarTools: Sendable {
 
   /// Create an event in an exact calendar. Returns the saved event.
   @MCPTool
-  func calendarCreate(calendarID: String, changes: EventChanges) async throws -> EventRecord {
+  func calendarCreate(calendarID: String, changes: EventCreate) async throws -> EventRecord {
     try validateIdentifier(calendarID)
+    let changes = changes.patch
     try changes.validate(creating: true)
     return try await access.create(calendarID: calendarID, changes: changes)
   }
@@ -81,9 +82,14 @@ final class CalendarTools: Sendable {
     -> EventRecord
   {
     try validateIdentifier(id)
+    let targetStart = try NativeDates.parse(start)
+    var changes = changes
+    if changes.start != nil, changes.allDay == nil {
+      changes.allDay = try await access.get(id: id, start: targetStart).allDay
+    }
     try changes.validate()
     return try await access.edit(
-      id: id, start: NativeDates.parse(start), span: span, changes: changes)
+      id: id, start: targetStart, span: span, changes: changes)
   }
 
   /// Move an occurrence or this and future occurrences. Use the returned id and start afterward.

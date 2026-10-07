@@ -39,6 +39,122 @@ struct AppleServiceTests {
     }
   }
 
+  @Test @MainActor func nativeAllDayWritesUseExclusiveDSTBoundaries() throws {
+    // Unsaved objects only: no permission request, store query, or native save.
+    let event = EKEvent(eventStore: EKEventStore())
+    for (start, end) in [
+      ("2026-11-01T04:00:00Z", "2026-11-02T05:00:00Z"),
+      ("2026-03-08T05:00:00Z", "2026-03-09T04:00:00Z"),
+      ("2026-10-12T04:00:00Z", "2026-10-14T04:00:00Z"),
+    ] {
+      let changes = EventChanges(
+        start: start, end: end, timeZone: "America/New_York", allDay: true)
+      try changes.validate()
+      try EventKitCalendar.apply(changes, to: event)
+      #expect(event.isAllDay)
+      #expect(event.startDate == (try NativeDates.parse(start)))
+      #expect(EventKitCalendar.exclusiveEnd(event) == (try NativeDates.parse(end)))
+      // Existing all-day time edits omit allDay and preserve it.
+      var edit = changes
+      edit.allDay = nil
+      try EventKitCalendar.apply(edit, to: event)
+      #expect(event.isAllDay)
+      #expect(EventKitCalendar.exclusiveEnd(event) == (try NativeDates.parse(end)))
+    }
+    let timed = EventChanges(
+      start: "2026-10-12T13:00:00Z", end: "2026-10-12T14:00:00Z",
+      timeZone: "America/New_York", allDay: false)
+    try EventKitCalendar.apply(timed, to: event)
+    #expect(!event.isAllDay)
+    #expect(EventKitCalendar.exclusiveEnd(event) == (try NativeDates.parse(timed.end!)))
+  }
+
+  @Test @MainActor func reminderDueWritesPreserveOrClearStart() throws {
+    let reminder = EKReminder(eventStore: EKEventStore())
+    let due = AppleDate(date: "2026-10-11")
+    try EventKitReminders.apply(ReminderChanges(due: due), to: reminder)
+    #expect(AppleDate(components: reminder.dueDateComponents) == due)
+    #expect(reminder.startDateComponents == nil)
+    let start = AppleDate(
+      date: "2026-10-10", time: "09:00:00", timeZone: "America/New_York")
+    try EventKitReminders.apply(ReminderChanges(start: start), to: reminder)
+    try EventKitReminders.apply(ReminderChanges(due: AppleDate(date: "2026-10-12")), to: reminder)
+    #expect(AppleDate(components: reminder.startDateComponents) == start)
+    try EventKitReminders.apply(ReminderChanges(due: due, clear: [.start]), to: reminder)
+    #expect(reminder.startDateComponents == nil)
+    #expect(AppleDate(components: reminder.dueDateComponents) == due)
+    let zone = TimeZone(identifier: "America/New_York")!
+    let components = try due.components(floatingTimeZone: zone)
+    #expect(components.timeZone == nil)
+    #expect(components.calendar?.timeZone == zone)
+  }
+
+  @Test @MainActor func dateOnlyAllDayScheduleRoundTripsAndValidates() async throws {
+    let changes = EventChanges(start: "2026-11-01", end: "2026-11-02", allDay: true)
+    try changes.validate()
+    let event = EKEvent(eventStore: EKEventStore())
+    try EventKitCalendar.apply(changes, to: event)
+    let schedule = try changes.schedule()
+    #expect(event.startDate == schedule.start)
+    #expect(EventKitCalendar.exclusiveEnd(event) == schedule.end)
+    let edit = EventChanges(start: "2026-03-08", end: "2026-03-09", allDay: true)
+    try EventKitCalendar.apply(edit, to: event)
+    #expect(event.startDate == (try edit.schedule().start))
+    #expect(EventKitCalendar.exclusiveEnd(event) == (try edit.schedule().end))
+    for invalid in [
+      EventChanges(start: "2026-02-30", end: "2026-03-02", allDay: true),
+      EventChanges(start: "2026-11-02", end: "2026-11-01", allDay: true),
+      EventChanges(start: "2026-11-01", end: "2026-11-02", allDay: false),
+    ] { await expectFailure { try invalid.validate() } }
+  }
+
+  @Test @MainActor func calendarToolPreservesAllDayBeforeValidatingEdits() async throws {
+    let calendar = FakeCalendar()
+    calendar.allDay = true
+    let dispatcher = ToolDispatcher(modules: [CalendarTools(access: calendar)])
+    for changes: JSONDictionary in [
+      ["start": "2026-11-01", "end": "2026-11-02"],
+      [
+        "start": "2026-11-01T04:00:00Z", "end": "2026-11-02T05:00:00Z",
+        "timeZone": "America/New_York",
+      ],
+    ] {
+      _ = try await dispatcher.call(
+        "calendar_edit",
+        arguments: [
+          "id": "fixture", "start": "2026-11-01T04:00:00Z", "span": "thisEvent",
+          "changes": .object(changes),
+        ])
+      #expect(calendar.lastEditChanges?.allDay == true)
+    }
+    calendar.allDay = false
+    await expectFailure {
+      try await dispatcher.call(
+        "calendar_edit",
+        arguments: [
+          "id": "fixture", "start": "2026-11-01T04:00:00Z", "span": "thisEvent",
+          "changes": ["start": "2026-11-01", "end": "2026-11-02"],
+        ])
+    }
+    #expect(calendar.calls == ["edit:fixture", "edit:fixture"])
+  }
+
+  @Test @MainActor func contactStandardAndCustomLabelsRoundTrip() {
+    let card = CNMutableContact()
+    card.phoneNumbers = [
+      CNLabeledValue(label: CNLabelHome, value: CNPhoneNumber(stringValue: "555-0100"))
+    ]
+    card.emailAddresses = [
+      CNLabeledValue(label: "Fixture custom", value: "fixture@example.invalid" as NSString)
+    ]
+    let original = NativeContacts.record(card)
+    #expect(original.phones?.first?.label == CNLabelHome)
+    #expect(original.emails?.first?.label == "Fixture custom")
+    NativeContacts.apply(ContactChanges(phones: original.phones, emails: original.emails), to: card)
+    #expect(card.phoneNumbers.first?.label == CNLabelHome)
+    #expect(card.emailAddresses.first?.label == "Fixture custom")
+  }
+
   @Test func recurrenceAndAlarmsValidateWithoutAppleStores() async throws {
     let rule = try decode(
       RepeatRule.self, #"{"frequency":"monthly","weekdays":[{"day":2,"week":-1}],"count":6}"#)
@@ -207,6 +323,8 @@ struct AppleServiceTests {
 @MainActor
 final class FakeCalendar: CalendarAccess {
   var available = true
+  var allDay = false
+  var lastEditChanges: EventChanges?
   var calls: [String] = []
   func setAvailable(_ value: Bool) { available = value }
   func accounts() throws -> AppleAccounts { AppleAccounts(accounts: []) }
@@ -230,7 +348,7 @@ final class FakeCalendar: CalendarAccess {
     EventRecord(
       id: id, calendarID: "calendar", title: "Fixture", start: NativeDates.string(start),
       end: NativeDates.string(start.addingTimeInterval(3600)),
-      timeZone: "GMT", allDay: false, notes: nil, location: nil, url: nil, availability: .busy,
+      timeZone: "GMT", allDay: allDay, notes: nil, location: nil, url: nil, availability: .busy,
       recurrence: nil, alarms: nil, otherAlarms: nil)
   }
   func create(calendarID: String, changes: EventChanges) throws -> EventRecord {
@@ -239,6 +357,7 @@ final class FakeCalendar: CalendarAccess {
   }
   func edit(id: String, start: Date, span: EventSpan, changes: EventChanges) throws -> EventRecord {
     calls.append("edit:" + id)
+    lastEditChanges = changes
     return try get(id: id, start: start)
   }
   func move(id: String, start: Date, span: EventSpan, calendarID: String) throws -> EventRecord {

@@ -88,7 +88,14 @@ public actor ToolDispatcher {
       else {
         throw invalidArguments("Unknown or null argument. Consult the tool schema.")
       }
-      return try await module.callTool(name, arguments: arguments)
+      do {
+        return try await module.callTool(name, arguments: arguments)
+      } catch is DecodingError {
+        throw invalidArguments(
+          "Missing, null, or incorrectly typed field. Consult the tool schema.")
+      } catch let error as MCPToolError {
+        throw invalidArguments(error.localizedDescription)
+      }
     }
     throw ToolFailure("unknown_tool", "Unknown tool")
   }

@@ -74,6 +74,35 @@ struct ScriptExecutionTests {
     #expect(try !fields[9].bool())
   }
 
+  @Test func mailEditReadbackFailureIsUncertainAfterMutation() throws {
+    let source = try AutomationRunner.source(for: .mail)
+    let start = try #require(source.range(of: "    if operation is \"edit\" then"))
+    let end = try #require(source.range(of: "    if operation is \"move\" then"))
+    let branch = String(source[start.lowerBound..<end.lowerBound])
+    let harness = """
+      on messageRecord(msg, bodyLimit)
+        error number -1728
+      end messageRecord
+      on dispatch(operation, args)
+        using terms from application id "com.apple.mail"
+          set msg to {read status:false, flagged status:false}
+          try
+            \(branch)
+          on error messageValue number errorNumber
+            return {errorNumber, read status of msg, flagged status of msg}
+          end try
+        end using terms from
+      end dispatch
+      """
+    let result = try AutomationRunner.evaluate(
+      source: harness, operation: "edit",
+      arguments: [.text(""), .text(""), .text(""), .text("true"), .text("true")]
+    ).array(3)
+    #expect(try result[0].int() == 9005)
+    #expect(try result[1].bool())
+    #expect(try result[2].bool())
+  }
+
   @Test func fixedScriptsCompileWithoutExecutingAppHandlers() throws {
     for app in [AutomationApp.mail, .notes] {
       let script = OSAScript(source: try AutomationRunner.source(for: app))

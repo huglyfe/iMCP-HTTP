@@ -139,3 +139,41 @@ protocol ReminderAccess: Sendable {
   func move(id: String, listID: String) throws -> ReminderRecord
   func delete(id: String) throws
 }
+
+@Schema
+struct ReminderCreate: Codable, Sendable {
+  var title: String
+  var notes: String?
+  var due: AppleDate?
+  var start: AppleDate?
+  var url: String?
+  var location: String?
+  var recurrence: [RepeatRule]?
+  var alarms: [TimeAlarm]?
+  var priority: Int?
+  var completed: Bool?
+  var clear: [ReminderClearField]?
+  var patch: ReminderChanges {
+    ReminderChanges(
+      title: title, notes: notes, due: due, start: start, url: url, location: location,
+      recurrence: recurrence, alarms: alarms, priority: priority, completed: completed, clear: clear
+    )
+  }
+}
+extension ReminderCreate {
+  init(from decoder: Decoder) throws {
+    try decoder.rejectUnknownFields(CodingKeys.self)
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    title = try values.decode(String.self, forKey: .title)
+    notes = try values.optional(String.self, forKey: .notes)
+    due = try values.optional(AppleDate.self, forKey: .due)
+    start = try values.optional(AppleDate.self, forKey: .start)
+    url = try values.optional(String.self, forKey: .url)
+    location = try values.optional(String.self, forKey: .location)
+    recurrence = try values.optional([RepeatRule].self, forKey: .recurrence)
+    alarms = try values.optional([TimeAlarm].self, forKey: .alarms)
+    priority = try values.optional(Int.self, forKey: .priority)
+    completed = try values.optional(Bool.self, forKey: .completed)
+    clear = try values.optional([ReminderClearField].self, forKey: .clear)
+  }
+}

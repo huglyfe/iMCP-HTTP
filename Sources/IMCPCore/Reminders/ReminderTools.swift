@@ -58,8 +58,9 @@ final class ReminderTools: Sendable {
   /// Create a reminder in an explicitly identified writable list. Title is required.
   /// Check for the item before retrying an interrupted or failed save.
   @MCPTool
-  func remindersCreate(listID: String, changes: ReminderChanges) async throws -> ReminderRecord {
+  func remindersCreate(listID: String, changes: ReminderCreate) async throws -> ReminderRecord {
     try validateIdentifier(listID)
+    let changes = changes.patch
     try changes.validate(creating: true)
     return try await access.create(listID: listID, changes: changes)
   }

@@ -37,6 +37,13 @@ struct MCPGateway: Sendable {
         id: nil, error: .init(code: -32700, message: "Invalid JSON-RPC message"))
       return Reply(status: .badRequest, data: try JSONEncoder().encode(failure))
     }
+    if message.method == "tools/call", case .request(let request) = message,
+      let arguments = request.params?["arguments"], arguments.dictionaryValue == nil
+    {
+      let failure = JSONRPCMessage.errorResponse(
+        id: request.id, error: .init(code: -32602, message: "Tool arguments must be an object."))
+      return Reply(status: .ok, data: try JSONEncoder().encode(failure))
+    }
     let server = RequestServer(authorization: authorization, dispatcher: dispatcher, grant: grant)
     // The SDK reads the protocol from its task-local session. Use a request-local
     // context, not a retained HTTP session, to preserve stateless/concurrent dispatch.
@@ -46,6 +53,25 @@ struct MCPGateway: Sendable {
       headers[HTTPField.Name("MCP-Protocol-Version")!] ?? MCPProtocolVersion.fallbackHTTP)
     let response = await context.work { _ in await server.handleMessage(message) }
     guard var response else { return Reply(status: .accepted) }
+    if message.method == "tools/list", case .response(let envelope) = response,
+      case .object(var result) = envelope.result, case .array(let listed) = result["tools"]
+    {
+      let metadata = await server.mcpToolMetadata
+      result["tools"] = .array(
+        try listed.map { value in
+          guard case .object(var tool) = value,
+            let name = tool["name"]?.stringValue,
+            let meta = metadata.first(where: { $0.name == name })
+          else { return value }
+          if tool["outputSchema"] != nil,
+            let type = meta.returnType as? any SchemaRepresentable.Type
+          {
+            tool["outputSchema"] = try JSONValue(encoding: type.schemaMetadata.schema)
+          }
+          return .object(tool)
+        })
+      response = .response(id: envelope.id, result: .object(result))
+    }
     // Capability delivery belongs to the transport. The SDK defaults to a
     // persistent connection; this stateless transport cannot deliver list changes.
     if ["initialize", "server/discover"].contains(message.method ?? ""),
@@ -75,7 +101,7 @@ private struct RequestServer: MCPServer, MCPToolProviding {
   let dispatcher: ToolDispatcher
   let grant: UUID
   var serverName: String { "iMCP-HTTP" }
-  var serverVersion: String { "0.5.0-alpha.1" }
+  var serverVersion: String { "0.5.0-alpha.2" }
   var mcpToolMetadata: [MCPToolMetadata] {
     get async {
       guard (try? await authorization.requireActive(grant)) != nil else { return [] }

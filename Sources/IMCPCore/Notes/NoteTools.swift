@@ -22,8 +22,24 @@ import SwiftMCP
   let plaintext: String?
   let bodyTruncated: Bool?
 }
+@Schema struct NoteSummary: Codable, Sendable {
+  let id: String
+  let folderID: String
+  let title: String
+  let modifiedAt: String
+  let locked: Bool
+  let shared: Bool
+  init(_ detail: NoteRecord) {
+    id = detail.id
+    folderID = detail.folderID
+    title = detail.title
+    modifiedAt = detail.modifiedAt
+    locked = detail.locked
+    shared = detail.shared
+  }
+}
 @Schema struct NotePage: Codable, Sendable {
-  let notes: [NoteRecord]
+  let notes: [NoteSummary]
   let nextOffset: Int?
 }
 
@@ -138,7 +154,7 @@ extension NoteTools: AppleToolModule {
     return AutomationAccounts(
       accounts: try values.map {
         let row = try $0.array(2)
-        return AutomationAccount(id: try row[0].string(), name: try row[1].string())
+        return AutomationAccount(id: try row[0].string(), title: try row[1].string())
       })
   }
   private func note(_ value: ScriptValue) throws -> NoteRecord {
@@ -166,7 +182,7 @@ extension NoteTools: AppleToolModule {
       "fetch", [.text(folderID), .text(search ?? ""), .integer(offset), .integer(limit)]
     ).array(2)
     return NotePage(
-      notes: try values[0].array().map(note),
+      notes: try values[0].array().map { NoteSummary(try note($0)) },
       nextOffset: try values[1].bool() ? offset + limit : nil)
   }
   func get(id: String, maxCharacters: Int) async throws -> NoteRecord {

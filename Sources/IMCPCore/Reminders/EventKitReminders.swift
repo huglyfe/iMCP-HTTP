@@ -126,12 +126,12 @@ public final class EventKitReminders: AppleAccess, ReminderAccess {
     let calendar = try calendar(listID, writing: true)
     let reminder = EKReminder(eventStore: store)
     reminder.calendar = calendar
-    try apply(changes, to: reminder)
+    try Self.apply(changes, to: reminder)
     return try save(reminder)
   }
   func edit(id: String, changes: ReminderChanges) throws -> ReminderRecord {
     let reminder = try reminder(id, writing: true)
-    try apply(changes, to: reminder)
+    try Self.apply(changes, to: reminder)
     return try save(reminder)
   }
   func move(id: String, listID: String) throws -> ReminderRecord {
@@ -163,7 +163,7 @@ public final class EventKitReminders: AppleAccess, ReminderAccess {
     }
     return record
   }
-  private func apply(_ changes: ReminderChanges, to reminder: EKReminder) throws {
+  static func apply(_ changes: ReminderChanges, to reminder: EKReminder) throws {
     // Resolve the entire update before mutating the EventKit object.
     let due = try changes.due?.components()
     let start = try changes.start?.components()
@@ -178,10 +178,8 @@ public final class EventKitReminders: AppleAccess, ReminderAccess {
       throw invalidArguments("Relative alarms require a start date.")
     }
     options.apply(to: reminder)
-    if let start { reminder.startDateComponents = start }
     if let url = changes.url { reminder.url = URL(string: url) }
     if let location = changes.location { reminder.location = location }
-    if changes.clear?.contains(.start) == true { reminder.startDateComponents = nil }
     if changes.clear?.contains(.url) == true { reminder.url = nil }
     if changes.clear?.contains(.location) == true { reminder.location = nil }
     if let title = changes.title { reminder.title = title }
@@ -189,6 +187,13 @@ public final class EventKitReminders: AppleAccess, ReminderAccess {
     if changes.clear?.contains(.notes) == true { reminder.notes = nil }
     if let due { reminder.dueDateComponents = due }
     if changes.clear?.contains(.due) == true { reminder.dueDateComponents = nil }
+    // Setting due synthesizes a start in EventKit. Restore the explicit or
+    // preserved start afterward, including nil for create and clear.
+    if changes.due != nil || changes.start != nil || changes.clear?.contains(.start) == true
+      || changes.clear?.contains(.due) == true
+    {
+      reminder.startDateComponents = effectiveStart
+    }
     if let priority = changes.priority { reminder.priority = priority }
     if let completed = changes.completed { reminder.isCompleted = completed }
   }

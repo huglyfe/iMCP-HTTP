@@ -72,7 +72,7 @@ struct AutomationTests {
     notes.setEnabled(true)
     runner.result = .list([.list([.text("account"), .text("Fixture")])])
     #expect(try await mail.accounts().accounts.first?.id == "account")
-    #expect(try await notes.accounts().accounts.first?.name == "Fixture")
+    #expect(try await notes.accounts().accounts.first?.title == "Fixture")
     let target = MailboxTarget(accountID: "account", path: ["Inbox", "Has/slash", "quote\"\\"])
     let restored = try MailboxTarget(id: target.id)
     #expect(restored.path == target.path)

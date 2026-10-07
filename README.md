@@ -2,7 +2,7 @@
 
 A native Mac app that gives approved AI clients access to Apple services through a local HTTP MCP server. One window manages services, individual tools, and connections; a compact menu-bar panel keeps the server within reach.
 
-**Public alpha candidate: 0.5.0-alpha.1.** Build from source on macOS 15 or later. APIs and saved-state formats may change. Bundles are ad-hoc signed development apps; notarized downloads and automatic updates are not provided. BLE, Mail, and Notes have automated fixture coverage but still need native hardware/app acceptance.
+**Public alpha candidate: 0.5.0-alpha.2.** Build from source on macOS 15 or later. APIs and saved-state formats may change. Bundles are ad-hoc signed development apps; notarized downloads and automatic updates are not provided. BLE, Mail, and Notes have automated fixture coverage but still need native hardware/app acceptance.
 
 ## Build and run
 

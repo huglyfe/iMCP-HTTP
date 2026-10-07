@@ -75,7 +75,7 @@ Consult current specifications during implementation; record the tested protocol
 
 ## Common tool contract
 
-Tools return JSON objects, with no prose success envelope. Fetch returns compact records and an optional `nextOffset`; get/create/edit/move return the supported detail record. Optional absent values are omitted. Account labels and write capabilities belong to list/account discovery, not every item. Deletes return `{ "deleted": true, "id": "..." }` after framework confirmation.
+Tools return JSON objects, with no prose success envelope. Fetch returns compact records and an optional `nextOffset`; get/create/edit/move return the supported detail record. Optional absent values are omitted. All account discoveries use `id` and `title`. Account labels and write capabilities belong to list/account discovery, not every item. Deletes return `{ "deleted": true, "id": "..." }` after framework confirmation.
 
 Use exact identifiers returned by discovery. No fuzzy write targeting, implicit default destination, automatic retry, or bulk writes. Omission preserves a patch field; explicit null and unknown fields fail. `clear` removes optional scalar fields. Replacement arrays use `[]` to clear. Contacts text fields clear with an empty string. Pages are not snapshots: restart after mutations.
 
@@ -93,7 +93,7 @@ Calls require an active OAuth grant and current service availability. EventKit a
 | `reminders_list_delete` | `id` → deletes the list **and its contents** |
 | `reminders_fetch` | `query` → `reminders`, `total`, optional `nextOffset`, resolved `timeZone` |
 | `reminders_get` | `id` → detail |
-| `reminders_create` | `listID`, `changes` with `title` → saved reminder |
+| `reminders_create` | `listID`, `changes` with schema-required `title` → saved reminder |
 | `reminders_edit` | `id`, `changes` → saved reminder |
 | `reminders_move` | `id`, `listID` → saved reminder; use its returned ID afterward |
 | `reminders_delete` | `id` → deletion |
@@ -123,7 +123,7 @@ Fetch returns occurrences overlapping the supplied positive range (at most 366 d
 
 `span` is `thisEvent` or `futureEvents` (selected occurrence onward). Recurrence edits on a repeating event require `futureEvents`. EventKit may notify attendees when shared events change. Attendee/invitation editing is not supported.
 
-`changes`: title, start, end, timeZone, allDay, notes, location, url, availability, alarms, recurrence, clear. Create requires title/start/end/timeZone. Changing any schedule field requires start/end/timeZone together. Start/end are ISO 8601 timestamps with seconds and an explicit UTC offset; timeZone is a named Foundation timezone retained for recurrence. End is exclusive and after start. All-day boundaries must be midnight in that zone, including across DST. Availability is busy/free/tentative/unavailable. Clearable scalars: notes/location/url.
+`changes`: title, start, end, timeZone, allDay, notes, location, url, availability, alarms, recurrence, clear. Create requires schema-required title/start/end. Timed schedules also require timeZone; changing a timed schedule supplies start/end/timeZone together. Timed start/end are ISO 8601 timestamps with seconds and an explicit UTC offset; timeZone is a named Foundation timezone retained for recurrence. For allDay=true, start/end may instead be YYYY-MM-DD dates, floating in the Mac timezone, with no timeZone needed. Midnight timestamps remain accepted for all-day schedules. When editing a schedule, omitted allDay preserves the exact occurrence's existing state before validation. End is exclusive and after start. All-day records add startDate/endDate civil dates; keep the returned timestamp start as the exact occurrence target for get/edit/move/delete. Availability is busy/free/tentative/unavailable. Clearable scalars: notes/location/url.
 
 ## Alarms and recurrence
 
@@ -148,7 +148,7 @@ Shared by Reminders and Calendar. `alarms` replaces display time alarms, up to e
 
 Reads and writes use individual stored cards (`unifyResults = false`), retaining organization-only contacts and avoiding implicit linked-card edits. Fetch enumerates only the account/group, applies search to names/phones/emails, and stops after the page plus one result. No global count or address-book mirror.
 
-Fields: givenName, middleName, familyName, prefix, suffix, nickname, organization, department, jobTitle, phones, emails, urls, addresses, birthday. Phone/email/URL values are `{label?, value}`; arrays replace the entire field. Address fields are label/street/city/state/postalCode/country/countryCode. Birthday is `{month, day, year?}`; unknown years remain absent. `clear: ["birthday"]` removes it. Create requires givenName, familyName, or organization. Unfetched fields are preserved. Photos, contact notes, linked-card merging, cross-account moves, and Smart Groups are unsupported. Account/group write support is decided by Contacts on save.
+Fields: givenName, middleName, familyName, prefix, suffix, nickname, organization, department, jobTitle, phones, emails, urls, addresses, birthday. Phone/email/URL values are `{label?, value}`; labels are exact native tokens or custom text, preserved on read/write rather than localized display strings. Arrays replace the entire field. Address fields are label/street/city/state/postalCode/country/countryCode. Birthday is `{month, day, year?}`; unknown years remain absent. `clear: ["birthday"]` removes it. Create requires givenName, familyName, or organization. Unfetched fields are preserved. Photos, contact notes, linked-card merging, cross-account moves, and Smart Groups are unsupported. Account/group write support is decided by Contacts on save.
 
 ## Maps
 

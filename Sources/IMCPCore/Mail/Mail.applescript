@@ -171,9 +171,13 @@ on perform(operation, args)
     set msg to my selectedMessage(box, item 3 of args)
     if operation is "get" then return my messageRecord(msg, item 4 of args)
     if operation is "edit" then
-      if item 4 of args is not "" then set read status of msg to ((item 4 of args) is "true")
-      if item 5 of args is not "" then set flagged status of msg to ((item 5 of args) is "true")
-      return my messageRecord(msg, 0)
+      try
+        if item 4 of args is not "" then set read status of msg to ((item 4 of args) is "true")
+        if item 5 of args is not "" then set flagged status of msg to ((item 5 of args) is "true")
+        return my messageRecord(msg, 0)
+      on error
+        error number 9005
+      end try
     end if
     if operation is "move" then
       set destination to my selectedMailbox(accountID, item 4 of args)

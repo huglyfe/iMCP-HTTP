@@ -3,11 +3,13 @@ import SwiftMCP
 
 @Schema
 struct ContactValue: Codable, Sendable {
+  /// Exact native label token or custom text. Preserve returned labels when editing.
   var label: String?
   let value: String
 }
 @Schema
 struct ContactAddress: Codable, Sendable {
+  /// Exact native label token or custom text. Preserve returned labels when editing.
   var label: String?
   var street: String?
   var city: String?

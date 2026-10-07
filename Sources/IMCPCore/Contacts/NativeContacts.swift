@@ -256,7 +256,7 @@ public final class NativeContacts: AppleAccess, ContactAccess {
   }
   private static func nonempty(_ value: String) -> String? { value.isEmpty ? nil : value }
   private static func label(_ value: String?) -> String? {
-    value.map(CNLabeledValue<NSString>.localizedString(forLabel:))
+    value
   }
   private static func phones(_ contact: CNContact) -> [ContactValue]? {
     contact.phoneNumbers.isEmpty

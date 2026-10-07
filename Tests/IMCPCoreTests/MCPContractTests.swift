@@ -61,6 +61,57 @@ struct MCPContractTests {
         let object = try #require(tool.dictionaryValue)
         #expect((object["outputSchema"] != nil) == structured)
       }
+      if structured {
+        for tool in tools {
+          let output = try #require(tool.dictionaryValue?["outputSchema"]?.dictionaryValue)
+          #expect(output["required"]?.arrayValue?.isEmpty == false)
+        }
+        let connection = try #require(
+          tools.first { $0.dictionaryValue?["name"] == "connection_check" }?.dictionaryValue)
+        let required = try #require(
+          connection["outputSchema"]?.dictionaryValue?["required"]?.arrayValue)
+        #expect(Set(required.compactMap(\.stringValue)) == ["connected", "appleDataAccessed"])
+      }
+      for (name, required) in [
+        ("reminders_create", ["title"]), ("calendar_create", ["title", "start", "end"]),
+      ] {
+        let tool = try #require(
+          tools.first { $0.dictionaryValue?["name"] == .string(name) }?.dictionaryValue)
+        let input = try #require(
+          tool["inputSchema"]?.dictionaryValue?["properties"]?.dictionaryValue?["changes"]?
+            .dictionaryValue)
+        #expect(
+          Set(input["required"]?.arrayValue?.compactMap(\.stringValue) ?? []) == Set(required))
+      }
+      if structured {
+        for (name, array, forbidden) in [
+          ("mail_fetch", "messages", "body"), ("notes_fetch", "notes", "bodyHTML"),
+        ] {
+          let tool = try #require(
+            tools.first { $0.dictionaryValue?["name"] == .string(name) }?.dictionaryValue)
+          let properties = try #require(
+            tool["outputSchema"]?.dictionaryValue?["properties"]?.dictionaryValue?[array]?
+              .dictionaryValue?["items"]?.dictionaryValue?["properties"]?.dictionaryValue)
+          #expect(properties[forbidden] == nil)
+        }
+      }
+      for arguments: JSONDictionary in [
+        ["id": "fixture"],
+        ["id": 1, "changes": ["title": "Fixture"]],
+        ["id": "fixture", "changes": ["due": .null]],
+      ] {
+        let failure = try result(
+          await request(
+            "tools/call", version: version,
+            params: ["name": "reminders_edit", "arguments": .object(arguments)]))
+        #expect(failure["isError"] == true)
+        #expect(failure["_meta"]?.dictionaryValue?["errorCode"] == "invalid_arguments")
+      }
+      let malformed = try await request(
+        "tools/call", version: version,
+        params: ["name": "connection_check", "arguments": "invalid"])
+      let malformedEnvelope = try JSONDecoder().decode(JSONValue.self, from: malformed.data)
+      #expect(malformedEnvelope.dictionaryValue?["error"]?.dictionaryValue?["code"] == -32602)
       let edit = try #require(
         tools.first { $0.dictionaryValue?["name"] == "reminders_edit" }?.dictionaryValue)
       let schema = try #require(edit["inputSchema"]?.dictionaryValue)

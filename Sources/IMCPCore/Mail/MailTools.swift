@@ -3,7 +3,7 @@ import SwiftMCP
 
 @Schema struct AutomationAccount: Codable, Sendable {
   let id: String
-  let name: String
+  let title: String
 }
 @Schema struct AutomationAccounts: Codable, Sendable { let accounts: [AutomationAccount] }
 @Schema struct MailboxRecord: Codable, Sendable {
@@ -27,8 +27,26 @@ import SwiftMCP
   let body: String?
   let bodyTruncated: Bool?
 }
+@Schema struct MailSummary: Codable, Sendable {
+  let id: String
+  let mailboxID: String
+  let subject: String
+  let sender: String
+  let receivedAt: String?
+  let read: Bool
+  let flagged: Bool
+  init(_ detail: MailMessage) {
+    id = detail.id
+    mailboxID = detail.mailboxID
+    subject = detail.subject
+    sender = detail.sender
+    receivedAt = detail.receivedAt
+    read = detail.read
+    flagged = detail.flagged
+  }
+}
 @Schema struct MailPage: Codable, Sendable {
-  let messages: [MailMessage]
+  let messages: [MailSummary]
   let nextOffset: Int?
 }
 
@@ -124,17 +142,17 @@ final class MailTools: Sendable {
   }
   /// Change read/flagged status on one exact message; omitted fields are preserved.
   @MCPTool func mailEdit(id: String, mailboxID: String, read: Bool? = nil, flagged: Bool? = nil)
-    async throws -> MailMessage
+    async throws -> MailSummary
   {
     try validateMailID(id)
     let target = try MailboxTarget(id: mailboxID)
     guard read != nil || flagged != nil else { throw invalidArguments("Provide read or flagged.") }
-    return try await access.edit(id: id, target: target, read: read, flagged: flagged)
+    return MailSummary(try await access.edit(id: id, target: target, read: read, flagged: flagged))
   }
   /// Move a message to an exact mailbox in the same account. Use its returned ID afterward.
   @MCPTool(hints: [.destructive])
   func mailMove(id: String, mailboxID: String, destinationMailboxID: String) async throws
-    -> MailMessage
+    -> MailSummary
   {
     try validateMailID(id)
     let target = try MailboxTarget(id: mailboxID)
@@ -142,7 +160,7 @@ final class MailTools: Sendable {
     guard target.accountID == destination.accountID else {
       throw invalidArguments("Cross-account Mail moves are unsupported.")
     }
-    return try await access.move(id: id, target: target, destination: destination)
+    return MailSummary(try await access.move(id: id, target: target, destination: destination))
   }
   /// Delete one exact message using Mail's native delete behavior. Trash/retention depends on the account.
   @MCPTool(hints: [.destructive])
@@ -191,7 +209,7 @@ extension MailTools: AppleToolModule {
     return AutomationAccounts(
       accounts: try rows.map {
         let row = try $0.array(2)
-        return AutomationAccount(id: try row[0].string(), name: try row[1].string())
+        return AutomationAccount(id: try row[0].string(), title: try row[1].string())
       })
   }
   private func mailbox(_ value: ScriptValue, accountID: String) throws -> MailboxRecord {
@@ -227,7 +245,7 @@ extension MailTools: AppleToolModule {
       ]
     ).array(2)
     return MailPage(
-      messages: try values[0].array().map { try message($0, target: target) },
+      messages: try values[0].array().map { MailSummary(try message($0, target: target)) },
       nextOffset: try values[1].bool() ? offset + limit : nil)
   }
   func get(id: String, target: MailboxTarget, maxCharacters: Int) async throws -> MailMessage {

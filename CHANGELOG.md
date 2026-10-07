@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0-alpha.2 — unreleased
+
+- Correct Calendar all-day exclusive ends and reminder start preservation/clearing.
+- Accept date-only all-day schedules and expose civil-date boundaries alongside exact occurrence timestamps.
+- Preserve an existing event's all-day state before validating schedule edits that omit allDay.
+- Advertise required create inputs and output fields; normalize invalid-input errors.
+- Preserve native Contacts label tokens across edits.
+- Report uncertain Mail edits after mutation/readback failures, use compact Mail/Notes summary schemas, and standardize account titles.
+
 ## 0.5.0-alpha.1 — unreleased
 
 First public source alpha candidate.

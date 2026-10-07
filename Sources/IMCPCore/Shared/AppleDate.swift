@@ -40,7 +40,11 @@ struct AppleDate: Codable, Sendable, Equatable {
     var components = formatter.calendar.dateComponents(
       time == nil ? [.year, .month, .day] : [.year, .month, .day, .hour, .minute, .second],
       from: instant)
-    components.calendar = formatter.calendar
+    var calendar = formatter.calendar!
+    // Validation of date-only values uses UTC, but floating native components
+    // must not carry that validation timezone in their embedded calendar.
+    calendar.timeZone = timeZone == nil ? floatingTimeZone : zone
+    components.calendar = calendar
     components.timeZone = timeZone == nil ? nil : zone
     return components
   }

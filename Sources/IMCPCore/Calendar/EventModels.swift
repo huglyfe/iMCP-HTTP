@@ -19,6 +19,8 @@ struct EventRecord: Codable, Sendable {
   let start: String
   let end: String
   let timeZone: String?
+  var startDate: String?
+  var endDate: String?
   let allDay: Bool
   let notes: String?
   let location: String?
@@ -36,6 +38,8 @@ struct EventSummary: Codable, Sendable {
   let start: String
   let end: String
   let timeZone: String?
+  let startDate: String?
+  let endDate: String?
   let allDay: Bool
   let location: String?
   init(_ record: EventRecord) {
@@ -45,6 +49,8 @@ struct EventSummary: Codable, Sendable {
     start = record.start
     end = record.end
     timeZone = record.timeZone
+    startDate = record.startDate
+    endDate = record.endDate
     allDay = record.allDay
     location = record.location
   }
@@ -59,11 +65,11 @@ struct EventPage: Codable, Sendable {
 @Schema
 struct EventChanges: Codable, Sendable {
   var title: String?
-  /// ISO 8601 timestamp with offset. Supply start and end together.
+  /// Timestamp with offset for timed events; YYYY-MM-DD for allDay. Supply start/end together.
   var start: String?
-  /// Exclusive end. All-day boundaries must be midnight in timeZone.
+  /// Exclusive end timestamp, or YYYY-MM-DD for allDay.
   var end: String?
-  /// IANA timezone, required on create and when changing times.
+  /// IANA timezone required for timed schedules. All-day dates float in the Mac timezone.
   var timeZone: String?
   var allDay: Bool?
   var notes: String?
@@ -76,27 +82,56 @@ struct EventChanges: Codable, Sendable {
   var alarms: [TimeAlarm]?
   var clear: [EventClearField]?
 
-  func validate(creating: Bool = false) throws {
-    if let title { try validateTitle(title) }
-    guard !creating || (title != nil && start != nil && end != nil && timeZone != nil) else {
-      throw invalidArguments("Create requires title, start, end, and timeZone.")
+  func schedule() throws -> (start: Date, end: Date, zone: TimeZone, allDay: Bool) {
+    guard let start, let end else {
+      throw invalidArguments("Provide start and end together when changing the schedule.")
     }
-    let hasSchedule = start != nil || end != nil || timeZone != nil || allDay != nil
-    if hasSchedule {
-      guard let start, let end, let timeZone, let zone = TimeZone(identifier: timeZone),
-        try NativeDates.parse(start) < NativeDates.parse(end)
-      else { throw invalidArguments("Provide start, a later end, and a valid timeZone together.") }
-      if allDay == true {
+    let allDay = allDay ?? false
+    if let timeZone, TimeZone(identifier: timeZone) == nil {
+      throw invalidArguments("Unknown timezone identifier.")
+    }
+    let zone: TimeZone
+    if allDay {
+      zone = .current
+    } else {
+      guard let name = timeZone, let value = TimeZone(identifier: name) else {
+        throw invalidArguments("Timed events require a valid timeZone.")
+      }
+      zone = value
+    }
+    func boundary(_ text: String) throws -> Date {
+      if allDay, text.count == 10 {
+        let day = AppleDate(date: text)
+        _ = try day.components(floatingTimeZone: zone)
+        guard let date = day.instant(in: zone) else {
+          throw invalidArguments("Invalid all-day date.")
+        }
+        return date
+      }
+      let date = try NativeDates.parse(text)
+      if allDay {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = zone
-        for text in [start, end] {
-          let date = try NativeDates.parse(text)
-          guard calendar.startOfDay(for: date) == date else {
-            throw invalidArguments("All-day events require midnight boundaries in timeZone.")
-          }
+        calendar.timeZone = timeZone.flatMap(TimeZone.init(identifier:)) ?? zone
+        guard calendar.startOfDay(for: date) == date else {
+          throw invalidArguments("All-day boundaries must be dates or local midnight timestamps.")
         }
       }
+      return date
     }
+    let from = try boundary(start)
+    let to = try boundary(end)
+    guard to > from else { throw invalidArguments("End must be after start.") }
+    return (from, to, zone, allDay)
+  }
+
+  func validate(creating: Bool = false) throws {
+    if let title { try validateTitle(title) }
+    guard !creating || (title != nil && start != nil && end != nil) else {
+      throw invalidArguments(
+        "Create requires title, start, and end; timed events also require timeZone.")
+    }
+    let hasSchedule = start != nil || end != nil || timeZone != nil || allDay != nil
+    if hasSchedule { _ = try schedule() }
     guard (notes?.utf8.count ?? 0) <= 16384, (location?.utf8.count ?? 0) <= 1024 else {
       throw invalidArguments("Notes or location is too long.")
     }
@@ -141,6 +176,49 @@ extension EventChanges {
     title = try values.optional(String.self, forKey: .title)
     start = try values.optional(String.self, forKey: .start)
     end = try values.optional(String.self, forKey: .end)
+    timeZone = try values.optional(String.self, forKey: .timeZone)
+    allDay = try values.optional(Bool.self, forKey: .allDay)
+    notes = try values.optional(String.self, forKey: .notes)
+    location = try values.optional(String.self, forKey: .location)
+    url = try values.optional(String.self, forKey: .url)
+    availability = try values.optional(EventAvailability.self, forKey: .availability)
+    recurrence = try values.optional([RepeatRule].self, forKey: .recurrence)
+    alarms = try values.optional([TimeAlarm].self, forKey: .alarms)
+    clear = try values.optional([EventClearField].self, forKey: .clear)
+  }
+}
+
+@Schema
+struct EventCreate: Codable, Sendable {
+  var title: String
+  /// Timestamp with offset for timed events; YYYY-MM-DD when allDay is true.
+  var start: String
+  /// Exclusive end timestamp or all-day date.
+  var end: String
+  /// Required for timed events; date-only all-day values float in the Mac timezone.
+  var timeZone: String?
+  var allDay: Bool?
+  var notes: String?
+  var location: String?
+  var url: String?
+  var availability: EventAvailability?
+  var recurrence: [RepeatRule]?
+  var alarms: [TimeAlarm]?
+  var clear: [EventClearField]?
+  var patch: EventChanges {
+    EventChanges(
+      title: title, start: start, end: end, timeZone: timeZone, allDay: allDay, notes: notes,
+      location: location, url: url, availability: availability, recurrence: recurrence,
+      alarms: alarms, clear: clear)
+  }
+}
+extension EventCreate {
+  init(from decoder: Decoder) throws {
+    try decoder.rejectUnknownFields(CodingKeys.self)
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    title = try values.decode(String.self, forKey: .title)
+    start = try values.decode(String.self, forKey: .start)
+    end = try values.decode(String.self, forKey: .end)
     timeZone = try values.optional(String.self, forKey: .timeZone)
     allDay = try values.optional(Bool.self, forKey: .allDay)
     notes = try values.optional(String.self, forKey: .notes)
