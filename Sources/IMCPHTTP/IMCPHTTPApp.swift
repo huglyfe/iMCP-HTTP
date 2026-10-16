@@ -5,7 +5,7 @@ struct IMCPHTTPApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
   var body: some Scene {
-    Window("iMCP-HTTP", id: "main") {
+    Window("iMCP-HTTP · Public Alpha", id: "main") {
       MainView(runtime: delegate.runtime)
     }
     .defaultSize(width: 580, height: 540)

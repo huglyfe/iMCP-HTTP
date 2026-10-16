@@ -1,6 +1,6 @@
 Generated with the built-in image generation tool; transparent_background=true.
-Design concept only; not wired into the app bundle. The alpha edge needs cleanup
-before packaging this raster as an application icon.
+Approved source artwork: App/AppIcon.png. The build generates the macOS .icns
+representations with sips and iconutil, preserving the approved design and alpha.
 
 Use case: logo-brand
 Asset type: original native macOS application icon for iMCP-HTTP, a small personal local server connecting AI tools to Mac services.

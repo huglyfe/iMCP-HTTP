@@ -44,6 +44,17 @@ for resource in "$bin_path"/*.bundle; do
     ditto "$resource" "$bundle/Contents/Resources/$(basename "$resource")"
 done
 cp App/Info.plist "$bundle/Contents/Info.plist"
+# Keep the approved artwork as the source; generate all standard macOS sizes.
+iconset="$work_path/AppIcon.iconset"
+mkdir -p "$iconset"
+for size in 16 32 128 256 512; do
+    sips --resampleHeightWidth "$size" "$size" App/AppIcon.png \
+        --out "$iconset/icon_${size}x${size}.png" >/dev/null
+    double_size=$((size * 2))
+    sips --resampleHeightWidth "$double_size" "$double_size" App/AppIcon.png \
+        --out "$iconset/icon_${size}x${size}@2x.png" >/dev/null
+done
+iconutil --convert icns --output "$bundle/Contents/Resources/AppIcon.icns" "$iconset"
 python3 scripts/bundle-notices.py "$bundle/Contents/Resources/Licenses"
 plutil -lint "$bundle/Contents/Info.plist"
 codesign --force --sign - "$bundle"

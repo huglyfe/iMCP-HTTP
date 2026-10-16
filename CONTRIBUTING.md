@@ -31,6 +31,8 @@ open dist/iMCP-HTTP.app
 
 Scripts use the system toolchain and Python standard library. There is no separate package-manager bootstrap, global configuration change, or generated project to maintain. `check-repository.py` checks local Markdown links, version consistency, Python syntax, and accidental runtime artifacts; it is not a comprehensive secret scanner. `bundle-notices.py` packages the resolved dependencies' notices and the retained component licenses.
 
+`App/AppIcon.png` is the approved icon artwork. The build uses macOS `sips` and `iconutil` to generate standard and Retina icon sizes, then embeds `AppIcon.icns` before signing. Generated iconsets stay in the temporary build directory. The compact menu-bar status symbol remains separate from the Finder/Dock icon.
+
 ## Tests
 
 Use Swift Testing's `#expect` and `#require` directly so failures show the expressions and actual values. Keep each test focused on a behavioral boundary. Use exact error-code assertions for permission, busy, timeout, and other contract failures. Asynchronous fixture waits must have deadlines and clean up their pending work.
