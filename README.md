@@ -14,12 +14,11 @@ Install full Xcode with Swift 6.2 or later, complete Xcode's first-launch setup,
 git clone https://github.com/huglyfe/iMCP-HTTP.git
 cd iMCP-HTTP
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-./scripts/check.sh
 ./scripts/build-app.sh release
 open dist/iMCP-HTTP.app
 ```
 
-Adjust `DEVELOPER_DIR` if Xcode is installed elsewhere. Checks build a separate bundle under `.build/check/`, so they do not overwrite the app you use. Quit the normal app before rebuilding it. Rebuilding an ad-hoc signed app may require macOS permission approval again.
+Adjust `DEVELOPER_DIR` if Xcode is installed elsewhere. Quit the app before rebuilding it. Rebuilding an ad-hoc signed app may require macOS permission approval again. Contributors should run the [full checks](CONTRIBUTING.md#daily-workflow) before submitting changes.
 
 ## Connect a client
 
@@ -73,7 +72,11 @@ Automated checks use fake service data, isolated temporary state, a real loopbac
 
 ## Release scope
 
-The first public release is a source alpha. Version 0.6 is planned for Developer ID-signed, notarized downloads, permission-persistence testing across updates, and selected services that require Apple capabilities. Each service still needs its own entitlement, provisioning, and native acceptance; signing alone does not enable it. Automatic updates are not part of the current release.
+The public alpha is available as source. There is no tagged release or downloadable app yet. Version 0.6 is planned for Developer ID-signed, notarized downloads, permission-persistence testing across updates, and selected services that require Apple capabilities. Each service still needs its own entitlement, provisioning, and native acceptance; signing alone does not enable it. Automatic updates are not part of the current release.
+
+## Feedback
+
+[Report a bug](https://github.com/huglyfe/iMCP-HTTP/issues/new?template=bug_report.yml) with your macOS version, the affected service or client, and steps using disposable data. Check the alpha limitations above first. Keep credentials, account details, and personal Apple content out of reports and screenshots.
 
 ## Development
 

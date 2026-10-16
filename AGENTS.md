@@ -8,12 +8,12 @@ Build a small native Mac app one owner can understand and maintain. Read `docs/P
 - Services contain global individual-tool switches. All approved clients share those choices; account-wide access does not mean omitting tool controls.
 
 - SwiftUI displays runtime state and submits owner decisions. Core code must not depend on SwiftUI bindings.
-- One app process owns the eventual listener and Apple permissions. Do not introduce a daemon, CLI proxy, hosted service, or remote exposure without a concrete requirement.
+- One app process owns the listener and Apple permissions. Do not introduce a daemon, CLI proxy, hosted service, or remote exposure without a concrete requirement.
 - OAuth is the chosen authentication path. Never replace it with trust by client name, an unauthenticated fallback, or a proprietary pairing exchange.
 - Client approval is account-wide for globally enabled capabilities. Do not add per-list permission editors or multi-user roles.
 - Apple frameworks own Apple data. Do not create a second reminders database.
 - Keep transport, authorization, dispatch, and service access separable, but extract interfaces only when needed by a real implementation or test.
-- Do not copy SimpleBot/T3 source merely to imitate their UX. Check licenses before any third-party code reuse and preserve attribution.
+- Check licenses before any third-party code reuse and preserve attribution. Interaction references do not require copying their implementation.
 
 ## Work in complete slices
 
@@ -33,4 +33,4 @@ Never commit credentials, authorization codes, tokens, signing keys, account dat
 
 Keep machine-specific operational notes outside this repository. Use relative paths, portable developer instructions, and synthetic examples. CONTRIBUTING.md owns the developer workflow; docs/PLAN.md owns milestone and acceptance status.
 
-Original code uses Apache-2.0; preserve all third-party notices. Preparing a public alpha does not itself authorize changing GitHub visibility, publishing a release, or deploying production integrations. Those actions require the owner's explicit instruction.
+Original code uses Apache-2.0; preserve all third-party notices. Preparing a public alpha does not itself authorize changing GitHub visibility, publishing a release, or deploying production integrations. Those actions require the owner's explicit instruction. A question about whether to publish is a request for advice, not authorization.

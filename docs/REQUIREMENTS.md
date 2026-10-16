@@ -6,7 +6,7 @@ These are product contracts. Current implementation and verification limits are 
 
 - Standard MCP-compatible OAuth authorization code + PKCE S256, with RFC 7591 dynamic registration for public local clients. No custom client software or repeated manual token pasting in the intended experience.
 - Authenticate each new owner approval with macOS LocalAuthentication device-owner policy, including the system password fallback. Bind success to that exact pending request and recheck expiry/server state before issuing a code. Cancellation, failure, unavailable authentication, denial, or pause grants nothing. Serialize prompts; discard late results. No app-wide unlocked interval, custom pairing code, or master password. Deny/revoke and routine token refresh do not require authentication. A browser page or client-supplied name alone cannot approve itself.
-- Keep the first UI minimal: client label, explanation of account-wide enabled access, Approve, Deny. Show the client identifier/details when needed to distinguish requests.
+- Keep the approval UI minimal: client label, explanation of account-wide enabled access, Approve, Deny. Show the client identifier/details when needed to distinguish requests.
 - The grant persists until explicitly revoked. Store a distinct grant per authorized connection; do not use one shared owner API key.
 - Registration accepts only bounded local callback metadata, creates no approval or grant, and uses the same atomic store as grants. Bound registration rate and count; unused registrations may be pruned, while active grants keep their client registration. No client-specific authentication branches or legacy store migration.
 - Pending requests and codes expire; codes are single-use, bound to client, callback, resource, and PKCE challenge. Bound pending requests and attempts to prevent unbounded approval prompts.
@@ -44,15 +44,15 @@ These are product contracts. Current implementation and verification limits are 
 - All approved clients share globally enabled services across the current macOS user's available accounts. No per-list restrictions in the first release.
 - Global enablement and current OS permissions are enforced on calls, not only when listing tools.
 - The tool list contains implemented, available, enabled tools; planned service names are never advertised as working tools.
-- Preserve the iMCP suite as the initial inventory, subject to adapter acceptance and OS/developer capability constraints.
+- Add services only after defining their tool contracts, Apple permission requirements, and native acceptance checks.
 - Use explicit read-only/destructive annotations and machine-readable errors/results. An annotation is not access control.
 - The app does not promise tool-call approval dialogs inside Codex; client-side approval policy remains the client's responsibility.
 
-## Reminders: first useful slice
+## Reminder mutation rules
 
 - List and fetch return opaque list/item identifiers and account/source context so duplicate names are distinguishable.
 - Editing and deletion require a specific identifier. Stale, missing, inaccessible, and read-only targets fail clearly.
-- Editing supports title, notes, priority, and due date first; distinguish omission from explicit clearing. Moves require exact source item and writable destination list identifiers.
+- Editing supports the fields in the Reminders contract below; distinguish omission from explicit clearing. Moves require exact source item and writable destination list identifiers.
 - Reject invalid dates and unknown targets; do not silently discard invalid input or change a different list.
 - Date-only deadlines remain date-only. Timed deadlines preserve the documented timezone behavior.
 - Delete operates on the exact identified item, including completed reminders. Return success only after framework confirmation; subsequent read verifies absence during acceptance.
@@ -61,7 +61,7 @@ These are product contracts. Current implementation and verification limits are 
 
 ## Verification
 
-When implementation starts, add Swift tests for validation, authorization transitions, dispatch enforcement, and adapter behavior using fakes/disposable storage. Add real listener tests for protocol boundaries. CI must run actual tests once present.
+Maintain Swift tests for validation, authorization transitions, dispatch enforcement, and adapter behavior using fakes and disposable storage. Exercise protocol boundaries with real loopback listener tests. Run these checks in CI.
 
 Manual acceptance uses Codex and disposable Apple data: prove successful behavior, rejection, revocation, restart, and cleanup. Neither source inspection, open TCP ports, a successful build, nor permission settings alone establish acceptance.
 

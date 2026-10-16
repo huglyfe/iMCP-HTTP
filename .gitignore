@@ -2,8 +2,7 @@
 .build/
 .swiftpm/
 dist/
-inspiration/*
-!inspiration/README.md
+inspiration/
 .env
 .env.*
 !.env.example

@@ -1,6 +1,6 @@
 # Implementation plan
 
-Originally agreed 2026-10-02. This is the maintained implementation and acceptance plan for public source alpha **0.5.0-alpha.3**. It records current behavior; superseded UI directions and machine-specific operational history are omitted.
+Implementation milestones and acceptance status for public source alpha **0.5.0-alpha.3**. Contributor commands live in [CONTRIBUTING.md](../CONTRIBUTING.md); protocol and data contracts live in [REQUIREMENTS.md](REQUIREMENTS.md).
 
 ## Product and settled decisions
 
@@ -15,7 +15,7 @@ iMCP-HTTP is a small native SwiftUI app giving approved AI clients access to App
 
 ## Implementation milestones
 
-| Original milestone | Implemented result | Remaining evidence |
+| Milestone | Implemented result | Remaining evidence |
 | --- | --- | --- |
 | OAuth/transport feasibility | SwiftMCP + Hummingbird; standard dynamic registration, PKCE, protected-resource metadata and per-request authorization | OpenCode tool/restart/revoke acceptance |
 | Reminders vertical slice | Account/list/item management, date filters, completion, alarms, recurrence and exact write targets | Broader account restrictions and permission persistence |
@@ -23,17 +23,13 @@ iMCP-HTTP is a small native SwiftUI app giving approved AI clients access to App
 | Apple-service coverage | 68 tools across Reminders, Calendar, Contacts, Maps, Photos metadata, BLE, Mail and Notes | Native acceptance by service below |
 | Source alpha publication | Apache-2.0, contributor workflow, pinned builds, dependency notices, isolated check bundles and public-facing documentation; implementation merged and repository made public | Tagged prerelease and binary distribution are separate future actions |
 
-Bluetooth pending operations use an enum. A first request waits up to 15 seconds for the manager to leave its initial unknown/resetting state; radio-off fails explicitly. Pause/disable/cancellation ends pending work and invalidates handles. Mail and Notes share one `AutomationRunner` owned by `AppRuntime`; separate runtime instances have independent execution slots. Tool contracts remain unchanged.
-
 ## Verification boundary
 
 The source alpha uses disposable fixtures, unsaved native value objects, isolated OAuth state, and loopback HTTP tests. Automated checks never read or mutate saved Apple records, initialize the Bluetooth radio, or call live Maps. Native acceptance below is prior manual evidence, not a claim that every service or account type is fully tested.
 
-The earlier candidate passed 83 tests locally but failed nine all-day Calendar assertions on hosted CI. Running the same fixture under UTC reproduced the failure: midnight timestamps in a supplied timezone reached EventKit as foreign instants, which EventKit rounded in the Mac timezone. All-day schedule parsing now preserves the input civil date when constructing Mac-local boundaries. Tests cover UTC, New York, Los Angeles, and Tokyo, including spring/fall DST and multi-day ranges. CI runs the canonical checks under UTC and America/New_York. Timed events retain their exact instants.
+Canonical checks cover 84 tests (11 app/runtime and 73 core), formatting, repository metadata and local links, builds, dependency notices, and bundle signatures. They pass locally and in hosted CI under UTC and America/New_York. A fresh source checkout also passed the canonical check and an optimized release build. Cross-timezone Calendar fixtures cover civil-date preservation, DST, and multi-day ranges; they do not replace saved-record acceptance.
 
-Canonical checks passed in UTC and America/New_York with 84 tests (11 app/runtime and 73 core), formatting, repository metadata/link validation, debug build, bundle notices, and signature verification. A fresh source-only checkout independently passed the canonical check and an optimized release build. Hosted CI passed both timezone jobs for implementation commit `7ae3179`; the final PR checks must also pass before merge. No new native Apple-data acceptance is implied by these checks.
-
-Publication hygiene reviewed the 13 pre-release commits (286 unique blobs) for common credential/private-key patterns, personal-email domains, absolute user-home paths, and runtime artifact paths; no matches were found. The tracked file inventory contains source, tests, documentation, build configuration, and retained licenses. This targeted review is not a comprehensive secret or security audit. Git author/committer metadata remains part of the history being published. Build packaging verified notices for all 30 resolved dependencies; the dependency lockfile is unchanged.
+A targeted pre-publication review found no common credential/private-key patterns, personal-email domains, absolute user-home paths, or runtime artifacts in the reviewed history. This was not a comprehensive secret or security audit. Build packaging verifies notices for all 30 resolved dependencies.
 
 Prior client fixtures verified Codex registration/login, five fake services, restart and revoke; OpenCode registration/login and saved grants passed. OpenCode tool/restart/revoke behavior remains unverified. Native owner approval success, OAuth refresh, Deny/revoke, window close/reopen, and Quit have manual evidence. Authentication cancellation/retry and update-time permission persistence remain open.
 
@@ -48,19 +44,17 @@ Prior client fixtures verified Codex registration/login, five fake services, res
 | Mail | Native permission, account/mailbox discovery, search/fetch/get | Disposable mutations and cleanup |
 | Notes | Shared-note reads and disposable create/search/get/edit/append/move/delete with readback | Locked/attachment rejection, cross-account moves, and confirmation of the earlier empty test-folder cleanup |
 
-The old acceptance calendars and reminder lists were removed with fresh reads confirming absence. Notes deletion follows native Recently Deleted retention. No automated cleanup may touch personal records. Native visual confirmation of the service-switch dimming fix, sleep/wake, and memory under enabled-service workloads remain open.
+Native visual confirmation of paused service controls, sleep/wake, and memory under enabled-service workloads remain open. Disposable acceptance items require verified cleanup; Notes deletion follows native Recently Deleted retention. No automated cleanup may touch personal records.
 
 ## Release scope and publication status
 
-The repository became public on 2026-10-16 after the owner's instruction. PR #1 merged the tested implementation into the default branch, `main`, at `f5aebd3`. Both timezone CI jobs passed on final PR commit `c2093ae`. Anonymous repository access was verified. The public source version is **0.5.0-alpha.3**; no GitHub release/tag or binary download has been published.
-
-The approved brackets-and-orange-square artwork is now a build input at `App/AppIcon.png`. The build generates standard/Retina icon representations and embeds `AppIcon.icns` before signing; the app's Info.plist references that resource. The window title and README explicitly identify the public alpha. The menu-bar status indicator retains its existing state/approval symbols. Canonical checks passed all 84 tests and verified the bundle signature. Decoding the bundled icon confirmed all ten expected sizes, and an AppKit preview verified macOS resolves the approved artwork for the bundle. This packaging check did not launch the app or repeat native service acceptance.
+Source is public on `main` at **0.5.0-alpha.3**. No GitHub release/tag or binary download has been published. The README and app window identify the alpha, and the build embeds the app icon at standard and Retina sizes. Bundle signature checks and a macOS icon preview passed; live Dock/window acceptance remains separate.
 
 Further changes use the canonical checks and disclose native acceptance gaps. Follow [CONTRIBUTING.md](../CONTRIBUTING.md#preparing-a-source-alpha) before creating a tagged prerelease. New release publication and production installation still require the owner's instruction.
 
 **Version 0.6** is planned for Developer ID-signed, notarized distribution and selected capabilities that require Apple developer provisioning. It includes the Apple Events entitlement needed by Mail/Notes under Hardened Runtime, first-install acceptance, and permission-persistence checks across two signed builds. Each new capability needs a separate feasibility and native-acceptance slice; a signature alone does not grant access. [WeatherKit](https://developer.apple.com/weatherkit/) is one candidate, subject to its capability and attribution requirements. Automatic updates are not required for the source alpha.
 
-Later service candidates and API constraints remain in [INSPIRATION.md](INSPIRATION.md#coverage-and-remaining-boundaries). Add one complete service at a time. Measure Mail/Notes search performance with disposable data before introducing batching or other optimization.
+Future service constraints are summarized in [INSPIRATION.md](INSPIRATION.md#coverage-and-remaining-boundaries). Add one complete service at a time. Measure Mail/Notes search performance with disposable data before introducing batching or other optimization.
 
 ## Native acceptance
 

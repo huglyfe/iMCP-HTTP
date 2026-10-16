@@ -4,6 +4,8 @@
 
 - Bundle the approved app icon for Finder, Dock, and Command-Tab using generated standard and Retina representations.
 - Label the main window and README explicitly as a public alpha.
+- Simplify build and contributor documentation, remove development-only notes and artwork prompts, and add a bug-report form.
+- Run CI once per pull request and again on `main`, avoiding duplicate branch builds.
 
 ## 0.5.0-alpha.3 - source published 2026-10-16
 

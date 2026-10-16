@@ -1,114 +1,50 @@
-# Prior art by question
+# Implementation references
 
-Prior art informs a decision; it is not a dependency list or a mandate to copy architecture. Check source and license at a pinned revision before reuse. Documentation review does not establish reliability.
+Use the reference relevant to the change. Check source and license at a pinned revision before reusing code. Reference projects are not build dependencies; optional local checkouts belong under ignored `inspiration/`. Record useful API constraints and design decisions here, with implementation and acceptance status in [PLAN.md](PLAN.md).
 
-| Question | Read first | Use |
+## Protocol and authorization
+
+- SwiftMCP 1.13.0 provides typed protocol dispatch and tool metadata; Hummingbird 2.27.0 owns HTTP and listener lifetime. The official Swift MCP SDK 0.12.1 rejected the tested Codex initialize payload's structured experimental capability. This is a version-specific compatibility finding, not a claim about later SDK versions.
+- MCP authorization, RFC 7591, and RFC 8252 define local public-client registration and OAuth with PKCE. Native approval grants access; client names are display data. The small adapted S256 helper is attributed in [third-party notices](../THIRD_PARTY_NOTICES.md).
+- Hummingbird's event-loop provider and SwiftNIO 2.103.0's scoped `MultiThreadedEventLoopGroup` support one listener worker with automatic shutdown. No process-wide per-core pool is needed.
+- Client setup references are linked beside each recipe in `Sources/IMCPHTTP/ClientSetup.swift`. Documentation establishes configuration shape; the app labels tested login/tool behavior separately. Hosted connectors cannot directly reach the loopback listener.
+
+## Apple services
+
+SDK headers and public framework documentation define API behavior. The following source reviews informed the design without copying implementations.
+
+| Reference and reviewed revision | Relevant areas | Resulting decision |
 | --- | --- | --- |
-| Native permissions and initial service inventory | [iMCP](https://github.com/mattt/iMCP) | App/service structure and Apple integration details. Source reviewed at `a7698def394e942da196e13de4798f8b69c3f800` (1.6.2). Replace trust-by-name and stdio/Bonjour coordination. |
-| Reminders editing/deletion | [apple-reminders-mcp](https://github.com/orshemtov/apple-reminders-mcp), [remindctl](https://github.com/openclaw/remindctl) | Identifiers, mutations, validation, and EventKit constraints. |
-| MCP/HTTP infrastructure | [official Swift SDK](https://github.com/modelcontextprotocol/swift-sdk) | Prefer tested protocol infrastructure; verify released server transport/auth capabilities. |
-| Alternative Swift server patterns | [SwiftMCP](https://github.com/Cocoanetics/SwiftMCP) | Selected at 1.13.0 after the official SDK failed the exact Codex initialize fixture; typed protocol/tools with Hummingbird owning HTTP; the Client trait is required by its macros. |
-| Simple pairing UX | [SimpleBot](https://github.com/huglyfe/SillyClaw), [T3 Code](https://github.com/pingdotgg/t3code/blob/main/docs/internals/environment-auth.md) | One-time approval, durable access, revoke. Their custom exchanges are not substitutes for MCP OAuth. SimpleBot source was reviewed locally; the repo may be private. Do not copy its source into this project without a license decision. |
-| Native service controls and connections | [OnlySwitch](https://github.com/JackLandrin/OnlySwitch) | Compact settings and remote-pairing interaction references. |
-| Native MCP browsing | [Companion](https://github.com/mattt/Companion) | SwiftUI inspection/navigation; not an authentication blueprint. |
-| Menu-bar settings polish | [Ice](https://github.com/jordanbaird/Ice) | Visual/interaction reference. GPL-3.0: avoid copying into the Apache-2.0 project without a compatible licensing decision. |
+| [iMCP](https://github.com/mattt/iMCP/tree/a7698def394e942da196e13de4798f8b69c3f800), MIT | Apple service adapters, Contacts extensions, app/service views | Use EventKit, Contacts, MapKit, and native permissions. Keep explicit account IDs and recurring occurrence targets. Use local HTTP and OAuth for this app. |
+| [apple-reminders-mcp](https://github.com/orshemtov/apple-reminders-mcp/tree/06638015e0e50330dec02fc6be69874cea181b0d), MIT | Tool names, ReminderModels, EventKitReminderStore | Support native list/item mutations with exact IDs and compact results. Completion and reopening belong in edit. |
+| [remindctl](https://github.com/openclaw/remindctl/tree/cdd7a06b85272980067f0e5b386fea9e10be0cf9), MIT | EventKitStore, ReminderAlarmMutation, ReminderSnapshot | Preserve non-time alarms, handle orphan reminders, and retain native calendar dates. |
+| [macos-apps-mcp](https://github.com/derekrussell/macos-apps-mcp/tree/739c0cb85340a749e8e946341b76c40fddad1e7d), MIT | Mail/Notes tools and scripts | Use account-qualified mailbox targets, native IDs, and note HTML semantics. Mailbox deletion is unavailable through the scripting dictionary. |
+| [griches/apple-mcp](https://github.com/griches/apple-mcp/tree/461524625402548f7729db9f7a3758264b7644be), no root license in the reviewed snapshot | Mail/Notes/Messages scripts | Scripting does not provide full Messages history. Do not copy this source without resolving its license. |
 
-## Study workflow
+Use [MapKit search](https://developer.apple.com/documentation/mapkit/mklocalsearch) and [directions](https://developer.apple.com/documentation/mapkit/mkdirections) for supplied locations. Use [PhotoKit](https://developer.apple.com/documentation/photokit) for album and asset metadata; richer private-database indexing is outside this app's design.
 
-Read the one route needed for the active milestone. Optional source snapshots belong in ignored `inspiration/<project>/`; record revision, license, files studied, and the resulting decision here when they inform implementation. Do not vendor entire projects or import private runtime state.
+Mail and Notes use their installed `.sdef` dictionaries and OSAKit. Typed Apple-event arguments/results avoid executable string interpolation. OpenScripting's `OSASetActiveProc` supports the host's execution deadline, including interpreter loops. [Automation permission preflight](https://developer.apple.com/documentation/coreservices/3025784-aedeterminepermissiontoautomatet) gates each app independently. Use bounded reads, sanitized failures, and explicit uncertain mutation outcomes.
 
-SimpleBot's useful bootstrap conventions are compact product/architecture contracts, a repo agent guide, one canonical check command, and prior art routed by the active question. Its conversation engine, queues, data model, and deployment rules do not apply to this app.
+[CoreBluetooth](https://developer.apple.com/documentation/corebluetooth) defines generic GATT behavior. Writes without response do not guarantee delivery; reads and subscriptions share the value callback. Keep generated handles for repeated UUID instances, bounded operations, and cancellation without assuming a device protocol.
 
-## Implementation decision, 2026-10-03
+## Native interface
 
-The owner requested a clean cut from iMCP. Reviewed released SwiftMCP 1.13.0 protocol dispatch/metadata and optional transport code, Hummingbird 2.27.0 application/lifecycle/form/body APIs, official Swift SDK 0.12.1 client capability decoder and PKCE helper, and Apple EventKit headers for identifiers, access, fetch cancellation, dates, refresh, and mutation. Only the small attributed S256 helper was adapted; no iMCP or other Reminders implementation was copied. Native EventKit is the Reminders authority.
+Apple's [Window and MenuBarExtra guidance](https://developer.apple.com/videos/play/wwdc2022/10061/) supports one normal window and a persistent compact menu panel sharing one runtime. [LocalAuthentication device-owner policy](https://developer.apple.com/documentation/LocalAuthentication/LAPolicy/deviceOwnerAuthentication) provides a fresh authentication context per approval with macOS password fallback.
 
-## Apple service/tool review, 2026-10-03
+[OnlySwitch](https://github.com/JackLandrin/OnlySwitch/tree/0036625f1554f0d4798ffd50383679b8ce1fc3b4) service rows and [Settings](https://github.com/sindresorhus/Settings/tree/f41475771f65379ca10852c95119a7f53f0de5a5) segmented controls informed the compact layout. These are interaction references; no source was copied. Preserve the service colors, individual tool switches, and three-tab window described in [requirements](REQUIREMENTS.md#native-interface).
 
-Reviewed these source revisions directly (all MIT licensed); no implementation code was copied:
+## Coverage and remaining boundaries
 
-| Repository / revision | Files studied | Decision |
-| --- | --- | --- |
-| [iMCP](https://github.com/mattt/iMCP/tree/a7698def394e942da196e13de4798f8b69c3f800) `a7698def` | `App/Services/{Calendar,Contacts,Reminders,Maps,Location,Shortcuts,Weather,Messages,Phone,Capture,Utilities}.swift`, Contacts extensions | Use EventKit, Contacts, and MapKit directly. Keep account IDs and recurring occurrence targeting. Do not inherit stdio/Bonjour, Ontology models, implicit default lists, unified-card mutations, or permission coupling between Maps and Location. |
-| [apple-reminders-mcp](https://github.com/orshemtov/apple-reminders-mcp/tree/06638015e0e50330dec02fc6be69874cea181b0d) `06638015` | ToolNames, ReminderModels, EventKitReminderStore | Add account/list CRUD and richer native fields. Consolidate completion/reopen into edit; avoid duplicate query tools, bulk operations, and success/message/warnings envelopes. |
-| [remindctl](https://github.com/openclaw/remindctl/tree/cdd7a06b85272980067f0e5b386fea9e10be0cf9) `cdd7a06b` | EventKitStore, ReminderAlarmMutation, EventKitReminderSnapshot | Preserve non-time alarms when editing time alarms; handle orphan reminders; keep calendar dates native. Do not adopt fuzzy write targets or URL-in-notes mirroring. |
+The [tool contracts](REQUIREMENTS.md#common-tool-contract) describe implemented capabilities; the [plan](PLAN.md#verification-boundary) records native acceptance. Future work must stay within the following boundaries.
 
-Apple SDK headers were the API authority for EventKit dates, recurrence restrictions, alarm types, calendar immutability, event spans, and Contacts fetch/save semantics. [MapKit search](https://developer.apple.com/documentation/mapkit/mklocalsearch) and [directions](https://developer.apple.com/documentation/mapkit/mkdirections) supply the Maps slice. Prior-art breadth is not proof of native acceptance or a reason to expose unused fields.
-
-### Coverage and remaining boundaries
-
-| Service | This implementation | Remaining work / constraint |
-| --- | --- | --- |
-| Reminders | Accounts/lists CRUD, search/date ranges, item CRUD/move/complete, URLs/start dates, display time alarms, recurrence | Native disposable acceptance; public EventKit does not expose Reminders tags/subtasks/sections/Smart Lists |
-| Calendar | Accounts/calendars CRUD, bounded occurrence search, exact occurrence CRUD/move, recurrence/alarms/availability | Native recurring/shared calendar acceptance; attendee/invitation editing is outside this contract |
-| Contacts | Individual-card search/CRUD, organizations, names/phones/emails/URLs/addresses/birthday, groups/membership | Native account/write acceptance; no notes entitlement, photos, Smart Groups, merge, or cross-account moves |
-| Maps | Place/address search, driving/walking routes, optional instructions | Native network acceptance; no device-location dependency, transit, reverse geocoding, or map images |
-| Location | Not implemented | Separate Core Location permission lifecycle and cancellable one-shot current location; do not couple to explicit-coordinate Maps tools |
-| Shortcuts | Not implemented | Supported `/usr/bin/shortcuts` list/run path is promising; needs bounded process I/O, cancellation, and explicit automation-side-effect semantics |
-| Weather | Not implemented | WeatherKit developer capability/signing and required attribution must be proven; avoid a hidden third-party weather backend |
-| Messages / Phone history | Not implemented | iMCP reads private SQLite stores with owner-selected folder access; not a public Apple framework adapter. No database access or Full Disk Access was added |
-| Capture | Not implemented | Screen/camera/microphone have separate permissions and binary output contracts; require their own slice |
-| Utilities | Not implemented | Add only concrete useful operations; no general shell, file, or automation escape hatch |
-
-### Tool design rules
-
-- One operation per tool; explicit IDs for writes and explicit destinations on create/move.
-- Flat read arguments when practical; one `changes` object for patches and one existing `query` for Reminders filters. No generic service/action router.
-- Typed JSON objects, compact search summaries, detail on get, saved record on mutation, minimal deletion receipt.
-- Omit absent values and empty optional detail arrays. Put names/capabilities in discovery, not repeated on every record.
-- Short action descriptions. Include only distinctions needed to avoid a wrong operation (such as recurrence scope or whole-list deletion).
-- Strict validation and native failure reporting; no compatibility aliases, notes-based feature emulation, or mirror database.
-
-## Menu-bar UI correction, 2026-10-03
-
-Reviewed iMCP at the same pinned `a7698def` revision: `App/App.swift`, `App/Views/ContentView.swift`, `ServiceToggleView.swift`, and `ServicesSettingsView.swift`, plus its MIT license (copyright 2025 Mattt). Reuse the interaction concept: menu-bar accessory, compact service rows, and Settings with individual tool controls. This implementation uses original SwiftUI code; no upstream source/assets, updater, window-resizing workaround, SwiftUI bindings in core, or stdio/Bonjour machinery are imported. HTTP setup and OAuth approval replace upstream connection setup and trust-by-name.
-
-## Additional Apple apps and performance review, 2026-10-03
-
-Owner preference: direct frameworks; defer app automation. No app data, Automation permissions, or private databases were inspected. Only installed scripting dictionaries, SDK headers, source snapshots, and official documentation were read. No code was copied.
-
-- [macos-apps-mcp](https://github.com/derekrussell/macos-apps-mcp/tree/739c0cb85340a749e8e946341b76c40fddad1e7d), MIT, copyright 2026 Derek Russell: reviewed tools/_osascript.py, tools/mail.py, tools/notes.py and scripts/mail.applescript / notes.applescript. Bounded subprocess automation, exact IDs/account-qualified targets, and HTML note content are useful references, but this is not a direct-framework implementation. No subprocess wrapper is adopted.
-- [griches/apple-mcp](https://github.com/griches/apple-mcp/tree/461524625402548f7729db9f7a3758264b7644be): reviewed mail/notes/messages AppleScript modules and installed Mail/Notes/Messages/Music scripting dictionaries. Automation can read Mail/Notes and send Messages, but Messages scripting does not provide full history. No source reuse; the checked snapshot has no root license file, so do not copy code without resolving its license.
-- iMCP’s pinned Weather, Messages, and Phone adapters: WeatherKit needs developer capabilities; message/call history queries private SQLite stores and folder bookmarks/WAL handling. Keep those integrations deferred rather than silently introducing database copies or broad disk access.
-- [osxphotos](https://github.com/RhetTbull/osxphotos): documentation describes SQLite-copy/in-memory indexing for richer library metadata. Avoid that architecture here; use [PhotoKit](https://developer.apple.com/documentation/photokit) for a bounded metadata-only slice. PHFetchOptions/PHPhotoLibrary/PHAsset SDK headers are the API authority.
-
-| App | Supported path / decision |
+| Area | Constraint |
 | --- | --- |
-| Photos | Implemented: PhotoKit album/asset metadata. No bytes/export/hidden assets or database mirror. |
-| Mail | MailKit is an extension framework, not general inbox querying. The later owner-authorized slice implements its scripting dictionary; no IMAP credentials/provider backend. |
-| Notes | No suitable public direct data framework. The later owner-authorized slice implements its scripting dictionary, without private databases. |
-| Weather | [WeatherKit](https://developer.apple.com/weatherkit/) supports macOS, requires Developer Program access/capability signing and attribution. Current bundle is ad-hoc signed; deferred until entitlement-backed acceptance. |
-| Music | [MusicKit](https://developer.apple.com/documentation/musickit) supports macOS; app service/developer token generation, user authorization, and subscription capabilities require proof. Music.app automation is deferred. |
-| Messages | History needs private chat.db in reviewed iMCP source; AppleScript sending is automation. Neither path is implemented. |
-| Phone | iMCP history reads private CallHistoryDB; [CallKit](https://developer.apple.com/documentation/callkit) integrates an app’s calls and does not supply the owner’s Phone history. Deferred. |
-| Home | [HomeKit platform metadata](https://developer.apple.com/tutorials/data/documentation/homekit.json) lists Mac Catalyst, not native macOS. No helper app/Catalyst rewrite introduced. |
-| Podcasts | [Apple iTunes Search API](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/Searching.html) supports public podcast search, not a verified personal subscriptions/progress API. No substitute catalog tool advertised as library integration. |
-| News | [Apple News API](https://developer.apple.com/documentation/applenewsapi) publishes/manages publisher articles; no suitable supported personal-reader integration found. Deferred. |
+| Reminders / Calendar | Public EventKit does not expose Reminders tags, subtasks, sections, or Smart Lists. Attendee/invitation editing is outside the current Calendar contract. |
+| Contacts / Photos | Contact notes need a separate entitlement. Linked-card merging and cross-account moves are unsupported. Photos exposes metadata, without media export, hidden assets, or a database mirror. |
+| Location / Capture | Require their own permission lifecycle and output contracts. Explicit-coordinate Maps tools do not need device location. |
+| Shortcuts | A bounded `/usr/bin/shortcuts` integration would need cancellation and explicit side-effect semantics. No general shell or automation tool is planned. |
+| Weather / Music | WeatherKit needs developer provisioning and attribution. MusicKit needs service authorization and capability checks. Neither is enabled by an ad-hoc signature. |
+| Messages / Phone | The reviewed history adapters use private stores. No private database access or Full Disk Access is part of this app. |
+| Home / Podcasts / News | No supported native personal-data integration has been established. A helper app or public catalog is not a substitute for one. |
 
-Performance: use authorization-state snapshots instead of idle polling. Reminders summary snapshots omit alarm/recurrence arrays and unused fields. EventKit still returns the native matching collection; native date predicate narrowing is deferred because query-zone/date-only/floating semantics must not regress merely to reduce RAM.
-
-## Client setup and OAuth cleanup
-
-Reviewed official MCP authorization (2025-11-25), RFC 7591, and RFC 8252 for standard native public-client registration. DCR adds interoperability without remote client-metadata fetching or vendor-specific authentication. Native approval remains the authority. Only local HTTP callbacks are accepted; cloud and remote-editor callbacks remain outside the loopback scope.
-
-Setup recipes reference the official pages linked in `Sources/IMCPHTTP/ClientSetup.swift`: OpenAI MCP and ChatGPT connection docs, Claude Code/Claude connector docs, Cursor MCP, Gemini CLI MCP, OpenCode MCP, VS Code MCP, Windsurf/Devin Desktop MCP, and Zed MCP. Documentation establishes configuration shape, not end-to-end acceptance. No vendor code was copied. The directory keeps those two kinds of evidence distinct.
-
-Login follow-up, 2026-10-04: consulted the official Codex MCP guide and installed `codex mcp add --help`, then verified actual single-command add/login using disposable configuration and credentials. The separate login command is unnecessary for initial setup on the tested CLI. Replaced meta-refresh with a small nonce-protected waiting page and read-only status polling; no third-party browser code or new dependency was introduced.
-
-## Listener lifetime and memory review
-
-Inspected the pinned Hummingbird 2.27.0 `Application` event-loop provider and SwiftNIO 2.103.0 `MultiThreadedEventLoopGroup.withEventLoopGroup` lifecycle API. The default singleton scales its workers with CPU cores. Use one scoped worker for this bounded local listener, with automatic shutdown on return; no new thread-management abstraction or environment setting is needed. Release-mode probes use temporary app state, disabled Apple services, public metadata requests, and process memory metrics. No third-party source was copied.
-
-## Native app and authenticated approval, 2026-10-04
-
-The owner approved a normal Mac window alongside the persistent menu-bar icon, superseding the earlier accessory-only direction. Reviewed Apple’s [single Window and MenuBarExtra scene guidance](https://developer.apple.com/videos/play/wwdc2022/10061/) and [LocalAuthentication device-owner policy](https://developer.apple.com/documentation/LocalAuthentication/LAPolicy/deviceOwnerAuthentication), plus installed LAContext headers for evaluation and invalidation. Use one shared runtime, a fresh context per approval, macOS password fallback, and asynchronous termination cleanup. No third-party implementation was copied; no pairing-code exchange or new service was added.
-
-The owner chose to preserve the original compact controls and three tabs, with the tab strip below the title bar. Reviewed OnlySwitch at `0036625f1554f0d4798ffd50383679b8ce1fc3b4` (`OnlySwitchListView.swift`, `SettingsView.swift`) and the segmented-control reference in [Sindre Sorhus’s Settings](https://github.com/sindresorhus/Settings/tree/f41475771f65379ca10852c95119a7f53f0de5a5). Use a standard SwiftUI segmented picker below the title bar and keep the original service rows. The owner rejected the extra enclosing border produced by grouped tabs; the content has no surrounding tab box. These are interaction references only: no source copied, new dependency, or sidebar introduced.
-
-## BLE, Mail, and Notes implementation
-
-The owner explicitly authorized Mail/Notes automation and a general BLE protocol interface, superseding the earlier deferral and device-specific idea. Re-read MIT-licensed `macos-apps-mcp` at `739c0cb85340a749e8e946341b76c40fddad1e7d`: `tools/mail.py`, `tools/notes.py`, and `scripts/mail.applescript` / `notes.applescript`. Its account-qualified mailbox targeting, native search/mutation boundaries, note HTML semantics, and mailbox-deletion limitation informed the design. All new adapter source is original; no third-party implementation was copied.
-
-The installed Mail and Notes `.sdef` dictionaries, OSAKit headers, and OpenScripting `OSASetActiveProc` callback contract are the scripting authority. The host uses that callback for a monotonic execution deadline, including interpreter loops, without Standard Additions self-events or an AppleScriptObjC bridge. Use numeric Mail library IDs within exact mailboxes, native Notes IDs, typed Apple-event arguments/results, in-process language instances, bounded reads, and sanitized failures. Do not adopt implicit destinations, global RFC Message-ID first matches, delimiter-separated records, subprocess wrappers, or broad disk access.
-
-Apple's [CoreBluetooth documentation](https://developer.apple.com/documentation/corebluetooth), [characteristic writes](https://developer.apple.com/documentation/corebluetooth/cbperipheral/writevalue(_:for:type:)), [notification control](https://developer.apple.com/documentation/corebluetooth/cbperipheral/setnotifyvalue(_:for:)), and installed framework headers define BLE behavior. In particular, writes without response do not guarantee delivery, and subscriptions use the same value callback as reads. The tools expose GATT primitives with no device-specific protocol assumption. [Automation permission preflight](https://developer.apple.com/documentation/coreservices/3025784-aedeterminepermissiontoautomatet) gates Mail and Notes independently of tool annotations.
+Measure native query cost before optimizing it. In particular, narrowing EventKit predicates must preserve date-only, floating-date, and query-timezone semantics. Keep performance experiments isolated from personal Apple data.
