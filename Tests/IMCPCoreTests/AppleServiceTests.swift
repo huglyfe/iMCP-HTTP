@@ -42,24 +42,31 @@ struct AppleServiceTests {
   @Test @MainActor func nativeAllDayWritesUseExclusiveDSTBoundaries() throws {
     // Unsaved objects only: no permission request, store query, or native save.
     let event = EKEvent(eventStore: EKEventStore())
-    for (start, end) in [
-      ("2026-11-01T04:00:00Z", "2026-11-02T05:00:00Z"),
-      ("2026-03-08T05:00:00Z", "2026-03-09T04:00:00Z"),
-      ("2026-10-12T04:00:00Z", "2026-10-14T04:00:00Z"),
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = .current
+    for (start, end, month, firstDay, endDay) in [
+      ("2026-11-01T04:00:00Z", "2026-11-02T05:00:00Z", 11, 1, 2),
+      ("2026-03-08T05:00:00Z", "2026-03-09T04:00:00Z", 3, 8, 9),
+      ("2026-10-12T04:00:00Z", "2026-10-14T04:00:00Z", 10, 12, 14),
     ] {
+      let expectedStart = try #require(
+        calendar.date(from: DateComponents(year: 2026, month: month, day: firstDay)))
+      let expectedEnd = try #require(
+        calendar.date(from: DateComponents(year: 2026, month: month, day: endDay)))
       let changes = EventChanges(
         start: start, end: end, timeZone: "America/New_York", allDay: true)
       try changes.validate()
       try EventKitCalendar.apply(changes, to: event)
       #expect(event.isAllDay)
-      #expect(event.startDate == (try NativeDates.parse(start)))
-      #expect(EventKitCalendar.exclusiveEnd(event) == (try NativeDates.parse(end)))
+      #expect(event.startDate == expectedStart)
+      #expect(EventKitCalendar.exclusiveEnd(event) == expectedEnd)
       // Existing all-day time edits omit allDay and preserve it.
       var edit = changes
       edit.allDay = nil
       try EventKitCalendar.apply(edit, to: event)
       #expect(event.isAllDay)
-      #expect(EventKitCalendar.exclusiveEnd(event) == (try NativeDates.parse(end)))
+      #expect(event.startDate == expectedStart)
+      #expect(EventKitCalendar.exclusiveEnd(event) == expectedEnd)
     }
     let timed = EventChanges(
       start: "2026-10-12T13:00:00Z", end: "2026-10-12T14:00:00Z",
@@ -67,6 +74,36 @@ struct AppleServiceTests {
     try EventKitCalendar.apply(timed, to: event)
     #expect(!event.isAllDay)
     #expect(EventKitCalendar.exclusiveEnd(event) == (try NativeDates.parse(timed.end!)))
+  }
+
+  @Test(arguments: ["UTC", "America/New_York", "America/Los_Angeles", "Asia/Tokyo"])
+  func allDayTimestampsPreserveCivilDates(floatingZone: String) throws {
+    let zone = try #require(TimeZone(identifier: floatingZone))
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = zone
+    for (start, end, month, firstDay, endDay) in [
+      ("2026-11-01T04:00:00Z", "2026-11-02T05:00:00Z", 11, 1, 2),
+      ("2026-03-08T05:00:00Z", "2026-03-09T04:00:00Z", 3, 8, 9),
+      ("2026-10-12T04:00:00Z", "2026-10-14T04:00:00Z", 10, 12, 14),
+    ] {
+      let changes = EventChanges(
+        start: start, end: end, timeZone: "America/New_York", allDay: true)
+      let schedule = try changes.schedule(floatingTimeZone: zone)
+      #expect(
+        schedule.start
+          == calendar.date(from: DateComponents(year: 2026, month: month, day: firstDay)))
+      #expect(
+        schedule.end == calendar.date(from: DateComponents(year: 2026, month: month, day: endDay)))
+      #expect(schedule.zone == zone)
+    }
+    // Timed events retain their exact instants, independent of the Mac timezone.
+    let timed = EventChanges(
+      start: "2026-03-08T05:00:00Z", end: "2026-03-09T04:00:00Z",
+      timeZone: "America/New_York", allDay: false)
+    let schedule = try timed.schedule(floatingTimeZone: zone)
+    #expect(schedule.start == (try NativeDates.parse(timed.start!)))
+    #expect(schedule.end == (try NativeDates.parse(timed.end!)))
+    #expect(schedule.zone.identifier == "America/New_York")
   }
 
   @Test @MainActor func reminderDueWritesPreserveOrClearStart() throws {

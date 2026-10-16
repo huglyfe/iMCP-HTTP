@@ -82,7 +82,9 @@ struct EventChanges: Codable, Sendable {
   var alarms: [TimeAlarm]?
   var clear: [EventClearField]?
 
-  func schedule() throws -> (start: Date, end: Date, zone: TimeZone, allDay: Bool) {
+  func schedule(floatingTimeZone: TimeZone = .current) throws -> (
+    start: Date, end: Date, zone: TimeZone, allDay: Bool
+  ) {
     guard let start, let end else {
       throw invalidArguments("Provide start and end together when changing the schedule.")
     }
@@ -92,7 +94,7 @@ struct EventChanges: Codable, Sendable {
     }
     let zone: TimeZone
     if allDay {
-      zone = .current
+      zone = floatingTimeZone
     } else {
       guard let name = timeZone, let value = TimeZone(identifier: name) else {
         throw invalidArguments("Timed events require a valid timeZone.")
@@ -115,6 +117,14 @@ struct EventChanges: Codable, Sendable {
         guard calendar.startOfDay(for: date) == date else {
           throw invalidArguments("All-day boundaries must be dates or local midnight timestamps.")
         }
+        // All-day events float in the Mac timezone. Preserve the input's civil
+        // date rather than letting EventKit round a foreign-zone instant.
+        let day = calendar.dateComponents([.year, .month, .day], from: date)
+        calendar.timeZone = zone
+        guard let localDate = calendar.date(from: day),
+          calendar.dateComponents([.year, .month, .day], from: localDate) == day
+        else { throw invalidArguments("Invalid all-day date in the Mac timezone.") }
+        return localDate
       }
       return date
     }

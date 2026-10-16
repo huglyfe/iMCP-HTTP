@@ -1,6 +1,6 @@
 # Implementation plan
 
-Originally agreed 2026-10-02. This is the maintained implementation and acceptance plan for public source alpha candidate **0.5.0-alpha.2**. It records current behavior; superseded UI directions and machine-specific operational history are omitted.
+Originally agreed 2026-10-02. This is the maintained implementation and acceptance plan for public source alpha candidate **0.5.0-alpha.3**. It records current behavior; superseded UI directions and machine-specific operational history are omitted.
 
 ## Product and settled decisions
 
@@ -18,7 +18,7 @@ iMCP-HTTP is a small native SwiftUI app giving approved AI clients access to App
 | Original milestone | Implemented result | Remaining evidence |
 | --- | --- | --- |
 | OAuth/transport feasibility | SwiftMCP + Hummingbird; standard dynamic registration, PKCE, protected-resource metadata and per-request authorization | OpenCode tool/restart/revoke acceptance |
-| Reminders vertical slice | Account/list/item management, date filters, completion, alarms, recurrence and exact write targets | Complete native edit/move/delete, account restrictions and cleanup |
+| Reminders vertical slice | Account/list/item management, date filters, completion, alarms, recurrence and exact write targets | Broader account restrictions and permission persistence |
 | Durable approval/app controls | Atomic grants/settings, refresh rotation, revoke, pause, single window/menu and macOS authentication | Native authentication cancellation/retry, signing and permission persistence |
 | Apple-service coverage | 68 tools across Reminders, Calendar, Contacts, Maps, Photos metadata, BLE, Mail and Notes | Native acceptance by service below |
 | Source alpha preparation | Apache-2.0, contributor workflow, pinned builds, dependency notices, isolated check bundles and public-facing documentation | GitHub CI on the final commit and explicit publication decision |
@@ -27,52 +27,44 @@ Bluetooth pending operations use an enum. A first request waits up to 15 seconds
 
 ## Verification boundary
 
-Local alpha preparation passed the canonical checks: 74 tests (11 app/runtime and 63 core), formatting, repository metadata/links, debug build, bundle resources/notices, and signature validation. A fresh source-only tree independently passed the same workflow and an optimized release build. A targeted review of all 11 existing local commits found no matching credential or machine-path patterns; this is not a comprehensive secret audit. Build-tool smoke checks verified running-target preservation and invalid-output rejection. GitHub visibility remains private; no release or production cutover was performed. Hosted CI for the final changes remains pending.
+The source alpha uses disposable fixtures, unsaved native value objects, isolated OAuth state, and loopback HTTP tests. Automated checks never read or mutate saved Apple records, initialize the Bluetooth radio, or call live Maps. Native acceptance below is prior manual evidence, not a claim that every service or account type is fully tested.
 
-Canonical checks cover authorization/persistence, real loopback HTTP, authenticated MCP contracts for every supported protocol version, strict validation, fixture/native value mapping, runtime ownership, cancellation and permission gates. Script fixtures compile fixed scripts and execute only pure helpers; BLE fixtures never initialize a radio manager. New tests cover runner contention/isolation, error/cancellation cleanup, and bounded BLE initialization through transient states.
+The earlier candidate passed 83 tests locally but failed nine all-day Calendar assertions on hosted CI. Running the same fixture under UTC reproduced the failure: midnight timestamps in a supplied timezone reached EventKit as foreign instants, which EventKit rounded in the Mac timezone. All-day schedule parsing now preserves the input civil date when constructing Mac-local boundaries. Tests cover UTC, New York, Los Angeles, and Tokyo, including spring/fall DST and multi-day ranges. CI runs the canonical checks under UTC and America/New_York. Timed events retain their exact instants.
 
-Prior real-client fixtures verified Codex registration/login, five fake services, restart and revoke; OpenCode registration/login and saved grants passed. Prior manual acceptance verified native approval success, OAuth exchange/refresh, Deny/revoke, window close/reopen and Quit. These are distinct from current automated evidence and do not establish native Apple CRUD completeness.
+Canonical checks passed in UTC and America/New_York with 84 tests (11 app/runtime and 73 core), formatting, repository metadata/link validation, debug build, bundle notices, and signature verification. A clean source-only checkout, an optimized release build, and hosted CI remain in progress. No new native Apple-data acceptance is implied by these checks.
+
+Publication hygiene reviewed the 13 pre-release commits (286 unique blobs) for common credential/private-key patterns, personal-email domains, absolute user-home paths, and runtime artifact paths; no matches were found. The tracked file inventory contains source, tests, documentation, build configuration, and retained licenses. This targeted review is not a comprehensive secret or security audit. Git author/committer metadata remains part of the history being published. Build packaging verified notices for all 30 resolved dependencies; the dependency lockfile is unchanged.
+
+Prior client fixtures verified Codex registration/login, five fake services, restart and revoke; OpenCode registration/login and saved grants passed. OpenCode tool/restart/revoke behavior remains unverified. Native owner approval success, OAuth refresh, Deny/revoke, window close/reopen, and Quit have manual evidence. Authentication cancellation/retry and update-time permission persistence remain open.
 
 | Native service | Evidence | Still unverified |
 | --- | --- | --- |
-| Reminders, Calendar, Contacts | Discovery, disposable container/item creation and exact readback; Calendar range search | Complete edits/moves/deletes, recurrence/account restrictions and verified cleanup |
-| Photos | Album discovery and empty-library reads | Populated-library filters/paging, hidden exclusion and permission/restart behavior |
-| Maps | Validation, fixture results, live search and walking directions | Other travel modes |
-| BLE | Fixture state, validation and notification-buffer coverage | Permission flows, real peripherals/GATT, notification delivery and sleep/wake |
-| Mail | Script fixtures, native permission and discovery/fetch/get | Disposable mutations and cleanup |
-| Notes | Script fixtures, native shared-note fetch/get, disposable create/search/get/edit/append/move/delete with readback | Locked/attachment mutation rejection, cross-account moves; empty test folder cleanup |
+| Reminders | Disposable create/get/edit, complete/reopen, due filtering, alarms/recurrence, moves, list rename/delete, and verified cleanup; due-only/start-preservation corrections read back from saved records | Broader shared/read-only account restrictions and permission persistence |
+| Calendar | Disposable create/get/edit/move, recurring pagination and occurrence deletion, calendar cleanup; DST and multi-day all-day saved-record readback | Saved-record acceptance of the later omitted-allDay correction and the latest cross-timezone conversion; broader account restrictions |
+| Contacts | Native discovery/reads and disposable create/get/edit/delete with native/custom label preservation and cleanup | Groups/membership, organization cards, account restrictions |
+| Photos | Album discovery and empty-library reads | Populated filters/paging/get, hidden exclusion, permission/restart behavior |
+| Maps | Native search and walking directions | Driving and other supported-option acceptance |
+| BLE | Native scanning; fixture validation, state, cancellation, and notification-buffer coverage | Real peripheral GATT operations, notification delivery, permission flows and sleep/wake |
+| Mail | Native permission, account/mailbox discovery, search/fetch/get | Disposable mutations and cleanup |
+| Notes | Shared-note reads and disposable create/search/get/edit/append/move/delete with readback | Locked/attachment rejection, cross-account moves, and confirmation of the earlier empty test-folder cleanup |
 
-Native permission persistence across rebuilt ad-hoc bundles, sleep/wake, and memory under enabled-service workloads remain open. Builds must not replace the running app. Use the contributor workflow and disposable fixtures below; record results without private account data.
+The old acceptance calendars and reminder lists were removed with fresh reads confirming absence. Notes deletion follows native Recently Deleted retention. No automated cleanup may touch personal records. Native visual confirmation of the service-switch dimming fix, sleep/wake, and memory under enabled-service workloads remain open.
 
-Latest native smoke checks verified authorized connection, Calendar discovery/fetch/get and disposable-calendar deletion with fresh-list confirmation, Contacts discovery/fetch/get, Mail discovery/fetch/get, Notes account/folder discovery, Photos albums and an empty asset fetch, Maps search/walking directions, and BLE scanning. The prior Reminders process termination and Notes false not-found failures were diagnosed and repaired; installed-app verification is recorded below. The two calendars and two reminder lists from the earlier acceptance run were removed; fresh tool discovery and the Calendar UI confirmed the acceptance entries were absent. Photos asset get and BLE GATT operations still require suitable test data/hardware.
+## Release scope and publication gates
 
-Diagnosis confirmed both fetch failures. The live Reminders stack stopped on the EventKit search queue at a Swift main-actor assertion inside the nested `compactMap` closure in `EventKitReminders.fetch`. A synthetic EventKit callback reproduced the assertion without reading saved reminders; explicitly marking the callback `@Sendable` made that fixture pass. Notes folder resolution and note counting succeeded, but `id of container of target` failed with AppleScript `-1728` on the existing shared note. A read-only copy of the fetch script succeeded when it reused the known folder ID. The general error mapping incorrectly presents that property failure as a missing target. Both repairs are now implemented: the EventKit completion explicitly uses Sendable isolation with a background-callback regression fixture, and Notes retains explicit folder context across reads and mutations. After reinstall and owner permission approval, the installed app passed completed, incomplete and combined Reminders fetches without termination, and Notes fetch/get against the previously failing shared note. A disposable Notes item passed create, search, get, HTML replacement, plain-text append, same-account move and delete, with exact folder and content readback. Native Notes UI independently confirmed the move and deletion. The note remains recoverable in Recently Deleted; the empty disposable destination folder remains because native UI automation timed out during cleanup. Authorized connection checks remained healthy afterward.
+The first public candidate is **0.5.0-alpha.3**. This release is source-only, with ad-hoc development bundles and explicit experimental-service limitations.
 
-Service/tool switches now limit busy-state dimming to the affected service/tool while retaining runtime serialization and pointer blocking during updates. This prevents unrelated controls from dimming on every change. The reinstalled app also shows secondary guidance beneath the Mail and Notes service headings to keep their apps open; enablement opens them when needed. Canonical checks passed (77 tests: 11 app/runtime and 66 core), including background EventKit callback and shared-note folder-context regressions, formatting, repository checks, build and signature validation. Native caption presence is verified; visual confirmation of the brief switch-flash fix remains pending.
+Before publication:
 
-## Calendar and Reminders date corrections
+1. Pass canonical checks, the clean-checkout release build, and UTC/New York hosted CI on the candidate commit.
+2. Review the tracked files and all history that will become public for credentials, personal data, generated runtime artifacts, and attribution. Record the scope of the review without claiming a comprehensive security audit.
+3. Reconcile README, changelog, architecture, and this plan with actual implementation and acceptance evidence. Keep current native gaps visible.
+4. Review and merge the implementation pull request so the default branch contains the app. The existing default branch still contains only the early scaffold until that merge.
+5. Obtain an explicit owner instruction to change repository visibility and create the GitHub prerelease. Preparing the candidate does not publish it.
 
-Disposable native acceptance verified Calendar recurring pagination, edits, moves, single-occurrence and future-event deletion, plus calendar rename/delete. Reminders verified moves, completion/reopening, date-range filtering, alarm and recurrence readback, and list rename/delete. All disposable items and containers were removed and absence verified.
+**Version 0.6** is planned for Developer ID-signed, notarized distribution and selected capabilities that require Apple developer provisioning. It includes the Apple Events entitlement needed by Mail/Notes under Hardened Runtime, first-install acceptance, and permission-persistence checks across two signed builds. Each new capability needs a separate feasibility and native-acceptance slice; a signature alone does not grant access. [WeatherKit](https://developer.apple.com/weatherkit/) is one candidate, subject to its capability and attribution requirements. Automatic updates are not required for the source alpha.
 
-That acceptance exposed two adapter bugs: setting all-day mode before assigning an exclusive end extended Calendar events by a day, and assigning a reminder due date synthesized a start after an explicit start clear. The adapters now assign Calendar boundaries before converting to all-day mode, return the native inclusive all-day end as an exclusive boundary, and restore the requested/preserved reminder start after assigning due. Floating reminder components no longer embed the UTC timezone used only for date validation.
-
-Unsaved EventKit regressions cover spring/fall DST, multi-day and existing all-day edits, conversion back to timed events, due-only reminders, preserved starts, explicit start clearing, and floating component timezones. These tests neither query nor save native records. After owner permission re-enablement, saved-record readback verified spring/fall DST exclusive ends, multi-day all-day events, and reminder due-only creation, start preservation, and explicit start clearing.
-
-## Tool interface corrections
-
-The alpha.2 contract retains named tools and exact occurrence targeting. Create inputs expose required title/start/end fields where applicable, typed output schemas preserve required fields, and malformed input receives machine-readable errors. All-day Calendar writes accept floating date-only boundaries and reads add civil dates alongside exact occurrence timestamps. Contacts labels retain native tokens, account discoveries consistently use title, and Mail/Notes pages use summary-only models. Mail edits convert post-mutation failures into uncertain_outcome.
-
-Regression evidence includes required schemas across supported protocol versions, missing/wrong/null input errors, standard/custom Contacts label roundtrips, date-only DST edits, and a pure Mail scripting fixture that proves readback failure after a mutation reports uncertainty. Canonical checks passed with 82 tests, formatting, repository validation, build, bundle, and signature checks. The installed replacement passed authorized connection_check without Apple-data access. After owner permission re-enablement and client reconnection, all 68 tools were attached and all eight services reported enabled; no automated tests access saved Apple data.
-
-The installed-app retest verified disposable Calendar creation/get/edit/move, recurrence paging and individual occurrence edit/deletion; Reminders creation/get/edit, completion/reopening, date filtering, alarms, recurrence, moves, and container renames/deletions; Contacts native/custom label preservation through create/get/edit/delete; and Notes create/fetch/append/edit/delete with compact summaries. Fresh reads confirmed all disposable calendars/lists and the contact were absent, and the note was absent from its original folder under native recovery retention. Mail account/mailbox discovery and empty fixture-title search, Maps search, Photos album discovery/empty asset fetch, and BLE scan passed. Mail mutations and BLE GATT remain unverified without disposable fixtures/hardware; native visual checks were blocked by a locked Mac.
-
-That retest found one additional Calendar validation gap: date-only schedule edits omitting allDay were rejected before the adapter could preserve the existing event's all-day state. The tool now resolves that state from the exact occurrence before validation. A dispatcher regression covers date-only/midnight edits and rejection for a timed target. Canonical checks passed with 83 tests (11 app/runtime and 72 core), formatting, repository validation, build, bundle, and signature checks. This additional correction has not yet replaced the permission-approved running app or passed saved-record acceptance.
-
-## Release and later work
-
-The source alpha can describe experimental integrations explicitly while native acceptance remains incomplete. It does not claim notarized distribution or production cutover readiness. Complete the publication checks in [CONTRIBUTING.md](../CONTRIBUTING.md#preparing-a-source-alpha), review the exact commit and GitHub CI, and obtain an explicit owner instruction before changing visibility or creating a release.
-
-Later service candidates and API constraints are recorded in [INSPIRATION.md](INSPIRATION.md#coverage-and-remaining-boundaries). Add one complete service slice at a time. Mail/Notes search performance should be measured with disposable native data before adding batching or other optimization. No performance refactor is part of this cleanup.
+Later service candidates and API constraints remain in [INSPIRATION.md](INSPIRATION.md#coverage-and-remaining-boundaries). Add one complete service at a time. Measure Mail/Notes search performance with disposable data before introducing batching or other optimization.
 
 ## Native acceptance
 

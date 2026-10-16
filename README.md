@@ -2,7 +2,7 @@
 
 A native Mac app that gives approved AI clients access to Apple services through a local HTTP MCP server. One window manages services, individual tools, and connections; a compact menu-bar panel keeps the server within reach.
 
-**Public alpha candidate: 0.5.0-alpha.2.** Build from source on macOS 15 or later. APIs and saved-state formats may change. Bundles are ad-hoc signed development apps; notarized downloads and automatic updates are not provided. BLE, Mail, and Notes have automated fixture coverage but still need native hardware/app acceptance.
+**Public alpha candidate: 0.5.0-alpha.3.** Build from source on macOS 15 or later. APIs and saved-state formats may change. Bundles are ad-hoc signed development apps; notarized downloads and automatic updates are not provided. Native acceptance varies by service; the remaining gaps are listed below.
 
 ## Build and run
 
@@ -61,12 +61,17 @@ See [tool contracts](docs/REQUIREMENTS.md#common-tool-contract) for fields, pagi
 
 ## Alpha limitations and verification
 
-- BLE hardware/GATT behavior and native Mail/Notes permission/CRUD workflows remain unverified. Use identifiable disposable devices and items for acceptance.
-- Reminders, Calendar, Contacts, and Photos have partial native acceptance; complete edit/move/delete, cleanup, account restrictions, and permission persistence still need verification. Live Maps results, sleep/wake, and enabled-service memory behavior also remain open.
+- Disposable native tests have exercised Reminders and Calendar creation, edits, moves, recurrence, deletion, and cleanup; Contacts card edits/deletion; and Notes creation, edits, append, move, and deletion. This is evidence for those workflows, not every account type or OS release.
+- BLE scanning, Mail reads, Photos album/empty-library reads, and Maps search/walking routes have native smoke evidence. BLE GATT, Mail mutations, populated Photos filters/paging, Contacts group workflows, and account restrictions remain unverified. Notes locked/attachment rejection and cross-account moves also need acceptance.
+- The latest Calendar schedule corrections have fixture coverage but still need saved-record acceptance on the release build. Permission persistence across rebuilt apps, authentication cancellation/retry, sleep/wake, and enabled-service memory behavior remain open.
 - Apple may reject writes or normalize content. An interrupted mutation can have an uncertain outcome; inspect saved state before retrying. Native deletion follows the app/account's retention rules.
 - There is one current settings/grant format and no automatic migration guarantee during alpha. No remote listener, per-client tool policy, background daemon, or private Apple database access is included.
 
 Automated checks use fake service data, isolated temporary state, a real loopback HTTP listener, and fixed script fixtures. They do not read or mutate personal Apple records, initialize the Bluetooth radio, or call live Maps. Native acceptance is tracked separately in the [plan](docs/PLAN.md#native-acceptance).
+
+## Release scope
+
+The first public release is a source alpha. Version 0.6 is planned for Developer ID-signed, notarized downloads, permission-persistence testing across updates, and selected services that require Apple capabilities. Each service still needs its own entitlement, provisioning, and native acceptance; signing alone does not enable it. Automatic updates are not part of the current release.
 
 ## Development
 

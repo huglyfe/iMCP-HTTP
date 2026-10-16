@@ -1,24 +1,16 @@
 # Changelog
 
-## 0.5.0-alpha.2 — unreleased
+## 0.5.0-alpha.3 - unreleased
 
-- Correct Calendar all-day exclusive ends and reminder start preservation/clearing.
-- Accept date-only all-day schedules and expose civil-date boundaries alongside exact occurrence timestamps.
-- Preserve an existing event's all-day state before validating schedule edits that omit allDay.
-- Advertise required create inputs and output fields; normalize invalid-input errors.
-- Preserve native Contacts label tokens across edits.
-- Report uncertain Mail edits after mutation/readback failures, use compact Mail/Notes summary schemas, and standardize account titles.
+First public source alpha candidate. Earlier alpha builds were private development builds.
 
-## 0.5.0-alpha.1 — unreleased
-
-First public source alpha candidate.
-
-- Native Mac window and persistent menu-bar controls; closing the window keeps the local server running.
+- Native Mac window and persistent menu-bar controls. Closing the window keeps the local server running.
 - Loopback Streamable HTTP MCP with OAuth dynamic registration, PKCE, macOS-authenticated approval, durable grants, refresh, pause, and revocation.
 - Global service and individual-tool switches across 68 tools for Reminders, Calendar, Contacts, Photos metadata, Maps, BLE, Mail, and Notes.
-- Generic CoreBluetooth/GATT operations with bounded initialization, typed pending operations, exact handles, cancellation, and notification polling.
-- Mail/Notes fixed-script adapters share a runtime-owned automation runner with bounded execution and typed Apple-event arguments.
-- Direct Swift Testing assertions, bounded fixture waits, focused scripting/lifecycle coverage, pinned builds, isolated check bundles, and dependency attribution packaging.
-- Original application code licensed under Apache-2.0; existing third-party notices preserved.
+- Calendar all-day schedules use exclusive ends and preserve civil dates across input and Mac timezones. Reminder due-date changes preserve or explicitly clear the start.
+- Required create inputs and output fields, machine-readable validation errors, compact read summaries, native Contacts labels, and explicit uncertain outcomes after Mail mutations.
+- Bounded CoreBluetooth operations and fixed Mail/Notes scripts with a shared automation runner, typed arguments, and cancellation handling.
+- Pinned dependencies, isolated fixture tests, UTC/DST CI coverage, staged app builds, and bundled dependency notices.
+- Apache-2.0 original code with retained third-party licenses.
 
-Native BLE/Mail/Notes acceptance, complete Apple-service mutation/cleanup coverage, sleep/wake, and signing/permission persistence remain open. This is a source alpha; notarized binaries and automatic updates are not included.
+Native acceptance and remaining gaps are recorded in [the plan](docs/PLAN.md#verification-boundary). BLE GATT, Mail mutations, populated Photos queries, some account restrictions, the latest Calendar changes on saved records, sleep/wake, and permission persistence remain open. This source alpha provides ad-hoc development bundles. Developer ID-signed and notarized distribution is planned for v0.6.

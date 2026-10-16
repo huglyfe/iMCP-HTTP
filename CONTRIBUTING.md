@@ -8,7 +8,7 @@ Keep iMCP-HTTP small enough for one owner to understand and maintain. Discuss ne
 - Complete Xcode's first-launch setup. Select its toolchain for your shell with `export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`, adjusting the path as needed.
 - Dependencies are pinned in `Package.resolved`. Builds use `--force-resolved-versions`; intentional upgrades must update the lockfile and review third-party notices together.
 
-CI uses macOS 15 with Xcode 26.3. Newer Xcode is usable locally; native behavior on a different macOS release still requires separate acceptance.
+CI uses macOS 15 with Xcode 26.3 and runs the canonical checks in UTC and America/New_York. This covers floating dates on a host whose timezone differs from the input, plus DST boundaries. Newer Xcode is usable locally; native behavior on a different macOS release still requires separate acceptance.
 
 ## Daily workflow
 
