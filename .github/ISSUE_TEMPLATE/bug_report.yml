@@ -1,0 +1,36 @@
+name: Bug report
+description: Report a problem with the public alpha.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [alpha limitations](https://github.com/huglyfe/iMCP-HTTP#alpha-limitations-and-verification) first.
+        Use disposable examples. Do not include tokens, account details, Apple content, or screenshots of unrelated data.
+  - type: input
+    id: environment
+    attributes:
+      label: App and macOS versions
+      description: Include the app version or commit, macOS version, and Xcode version if this is a build failure.
+    validations:
+      required: true
+  - type: input
+    id: affected
+    attributes:
+      label: Affected service or client
+      description: Include the client version and tool name when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Describe the smallest example using disposable data.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+      description: Include sanitized error text if available.
+    validations:
+      required: true
