@@ -1,0 +1,207 @@
+import Foundation
+import Synchronization
+import Testing
+
+@testable import IMCPCore
+
+struct AuthorizationFixture {
+  let directory: URL
+  let configuration = ServerConfiguration(port: 19765)
+  let store: AuthorizationStore
+  let clientID: String
+  let verifier = String(repeating: "a", count: 64)
+
+  init() async throws {
+    directory = FileManager.default.temporaryDirectory.appendingPathComponent("imcp-test-\(UUID())")
+    store = try AuthorizationStore(
+      configuration: configuration, storeURL: directory.appendingPathComponent("grants.json"))
+    clientID = try await store.register(
+      ClientRegistrationRequest(
+        redirectURIs: ["http://127.0.0.1:49152/callback"], clientName: "Fixture client",
+        tokenEndpointAuthMethod: "none")
+    ).clientID
+  }
+  func cleanup() { try? FileManager.default.removeItem(at: directory) }
+  func fields() throws -> [String: String] {
+    [
+      "client_id": clientID, "response_type": "code",
+      "redirect_uri": "http://127.0.0.1:49152/callback",
+      "state": "test-state", "code_challenge_method": "S256",
+      "code_challenge": try PKCE.makeChallenge(from: verifier),
+      "resource": configuration.resource, "scope": "apple-services",
+    ]
+  }
+  func code() async throws -> String {
+    let id = try await store.begin(fields())
+    try await store.decide(id: id, approve: true)
+    let url = try #require(await store.callback(for: id))
+    let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+    #expect(
+      components.queryItems?.first(where: { $0.name == "iss" })?.value == configuration.issuer)
+    return try #require(components.queryItems?.first(where: { $0.name == "code" })?.value)
+  }
+  func exchangeFields(_ code: String) -> [String: String] {
+    [
+      "grant_type": "authorization_code", "client_id": clientID, "code": code,
+      "redirect_uri": "http://127.0.0.1:49152/callback", "code_verifier": verifier,
+      "resource": configuration.resource,
+    ]
+  }
+  func tokens() async throws -> TokenResponse { try await store.exchange(exchangeFields(code())) }
+}
+
+struct AuthorizationTests {
+  @Test func approvalNearExpiryRetainsItsFullCallbackWindow() async throws {
+    let f = try await AuthorizationFixture()
+    defer { f.cleanup() }
+    let clock = ApprovalClock()
+    let store = try AuthorizationStore(
+      configuration: f.configuration, storeURL: f.directory.appendingPathComponent("grants.json"),
+      now: { clock.now.withLock { $0 } })
+    let id = try await store.begin(f.fields())
+    clock.now.withLock { $0 = $0.addingTimeInterval(179) }
+    try await store.decide(id: id, approve: true)
+    clock.now.withLock { $0 = $0.addingTimeInterval(2) }
+    #expect(try await store.approvalReady(for: id))
+    #expect(try await store.approvalReady(for: id))
+    let callback = try #require(try await store.callback(for: id))
+    let code = try #require(
+      URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems?
+        .first { $0.name == "code" }?.value)
+    _ = try await store.exchange(f.exchangeFields(code))
+    await expectFailure { try await store.approvalReady(for: id) }
+  }
+
+  @Test func approveRestartRefreshRevoke() async throws {
+    let f = try await AuthorizationFixture()
+    defer { f.cleanup() }
+    let tokens = try await f.tokens()
+    let grant = try await f.store.authenticate("Bearer \(tokens.accessToken)")
+    let disk = try String(
+      contentsOf: f.directory.appendingPathComponent("grants.json"), encoding: .utf8)
+    #expect(!disk.contains(tokens.accessToken))
+    #expect(!disk.contains(tokens.refreshToken))
+    let permissions = try FileManager.default.attributesOfItem(
+      atPath: f.directory.appendingPathComponent("grants.json").path)
+    #expect((permissions[.posixPermissions] as? Int) == 0o600)
+    let reopened = try AuthorizationStore(
+      configuration: f.configuration, storeURL: f.directory.appendingPathComponent("grants.json"))
+    #expect(try await reopened.authenticate("Bearer \(tokens.accessToken)") == grant)
+    let rotated = try await reopened.exchange([
+      "grant_type": "refresh_token", "client_id": f.clientID,
+      "resource": f.configuration.resource, "refresh_token": tokens.refreshToken,
+    ])
+    #expect(try await reopened.authenticate("Bearer \(rotated.accessToken)") == grant)
+    await expectFailure { try await reopened.authenticate("Bearer \(tokens.accessToken)") }
+    try await reopened.revoke(grant)
+    await expectFailure { try await reopened.authenticate("Bearer \(rotated.accessToken)") }
+    let again = try AuthorizationStore(
+      configuration: f.configuration, storeURL: f.directory.appendingPathComponent("grants.json"))
+    await expectFailure {
+      try await again.exchange([
+        "grant_type": "refresh_token", "client_id": f.clientID,
+        "resource": f.configuration.resource, "refresh_token": rotated.refreshToken,
+      ])
+    }
+  }
+
+  @Test func codesAreBoundAndSingleUse() async throws {
+    let f = try await AuthorizationFixture()
+    defer { f.cleanup() }
+    for field in ["code_verifier", "redirect_uri", "resource", "client_id"] {
+      let code = try await f.code()
+      var fields = f.exchangeFields(code)
+      fields[field] = "wrong"
+      await expectFailure { try await f.store.exchange(fields) }
+    }
+    let code = try await f.code()
+    _ = try await f.store.exchange(f.exchangeFields(code))
+    await expectFailure { try await f.store.exchange(f.exchangeFields(code)) }
+  }
+
+  @Test func denialAndCallbackValidation() async throws {
+    let f = try await AuthorizationFixture()
+    defer { f.cleanup() }
+    for callback in [
+      "http://localhost:49152/callback", "http://127.0.0.1:49152/other",
+      "http://127.0.0.1.evil:49152/callback", "https://example.com/callback",
+      "http://127.0.0.1:49152/callback?x=1", "http://user@127.0.0.1:49152/callback",
+    ] {
+      var fields = try f.fields()
+      fields["redirect_uri"] = callback
+      await expectFailure { try await f.store.begin(fields) }
+    }
+    let id = try await f.store.begin(f.fields())
+    #expect(try await f.store.callback(for: id) == nil)
+    try await f.store.decide(id: id, approve: false)
+    let url = try #require(await f.store.callback(for: id))
+    #expect(url.absoluteString.contains("error=access_denied"))
+    #expect(!url.absoluteString.contains("code="))
+    #expect(await f.store.clients().isEmpty)
+  }
+
+  @Test func refreshReplayRevokesFamilyAndPauseRejects() async throws {
+    let f = try await AuthorizationFixture()
+    defer { f.cleanup() }
+    let tokens = try await f.tokens()
+    let fields = [
+      "grant_type": "refresh_token", "client_id": f.clientID,
+      "resource": f.configuration.resource, "refresh_token": tokens.refreshToken,
+    ]
+    let rotated = try await f.store.exchange(fields)
+    await expectFailure { try await f.store.exchange(fields) }
+    await expectFailure { try await f.store.authenticate("Bearer \(rotated.accessToken)") }
+    let next = try await f.tokens()
+    await f.store.setAccepting(false)
+    await expectFailure { try await f.store.authenticate("Bearer \(next.accessToken)") }
+    await expectFailure { try await f.store.begin(f.fields()) }
+    await f.store.setAccepting(true)
+    _ = try await f.store.authenticate("Bearer \(next.accessToken)")
+  }
+
+  @Test func pendingRequestsAreBoundedAndNotRecovered() async throws {
+    let f = try await AuthorizationFixture()
+    defer { f.cleanup() }
+    for _ in 0..<8 { _ = try await f.store.begin(f.fields()) }
+    await expectFailure { try await f.store.begin(f.fields()) }
+    let reopened = try AuthorizationStore(
+      configuration: f.configuration, storeURL: f.directory.appendingPathComponent("grants.json"))
+    #expect(await reopened.approvals().isEmpty)
+  }
+
+  @Test func expirationsAndFailedPersistenceFailClosed() async throws {
+    let f = try await AuthorizationFixture()
+    defer { f.cleanup() }
+    let tokens = try await f.tokens()
+    let future = Date().addingTimeInterval(901)
+    let expired = try AuthorizationStore(
+      configuration: f.configuration,
+      storeURL: f.directory.appendingPathComponent("grants.json"), now: { future })
+    await expectFailure { try await expired.authenticate("Bearer \(tokens.accessToken)") }
+    let refreshed = try await expired.exchange([
+      "grant_type": "refresh_token", "client_id": f.clientID,
+      "resource": f.configuration.resource, "refresh_token": tokens.refreshToken,
+    ])
+    _ = try await expired.authenticate("Bearer \(refreshed.accessToken)")
+    let id = try await f.store.begin(f.fields())
+    try await f.store.decide(id: id, approve: true)
+    let callback = try #require(await f.store.callback(for: id))
+    let code = try #require(
+      URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems?.first {
+        $0.name == "code"
+      }?.value)
+    // Make atomic replacement fail after registration and approval have succeeded.
+    let storeURL = f.directory.appendingPathComponent("grants.json")
+    try FileManager.default.removeItem(at: storeURL)
+    try FileManager.default.createDirectory(at: storeURL, withIntermediateDirectories: false)
+    let before = await f.store.clients().count
+    await expectFailure { try await f.store.exchange(f.exchangeFields(code)) }
+    #expect(await f.store.clients().count == before)
+
+  }
+
+}
+
+private final class ApprovalClock: Sendable {
+  let now = Mutex(Date())
+}

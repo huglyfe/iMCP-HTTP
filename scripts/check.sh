@@ -2,10 +2,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-swift format lint --strict --recursive Package.swift Sources
-bash -n scripts/build-app.sh scripts/check.sh
+swift format lint --strict --recursive Package.swift Sources Tests
+for script in scripts/*.sh; do bash -n "$script"; done
+python3 scripts/check-repository.py
+swift test -j 2 --force-resolved-versions --disable-xctest "$@"
+# Checks must not overwrite the normal development app, which may be running.
+export IMCP_BUILD_APP_PATH="${IMCP_BUILD_APP_PATH:-$PWD/.build/check/iMCP-HTTP.app}"
 ./scripts/build-app.sh debug
-plutil -lint dist/iMCP-HTTP.app/Contents/Info.plist
-codesign --verify --strict dist/iMCP-HTTP.app
 git diff --check
-echo "Skeleton checks passed. OAuth, MCP, and Apple-service acceptance are not implemented."
+git diff --cached --check
+echo "Repository, tests, build, bundle, and formatting checks passed. See docs/PLAN.md for native acceptance."

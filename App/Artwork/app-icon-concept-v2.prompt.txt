@@ -1,0 +1,10 @@
+Generated with the built-in image generation tool; transparent_background=true.
+Design concept only; not wired into the app bundle. The alpha edge needs cleanup
+before packaging this raster as an application icon.
+
+Use case: logo-brand
+Asset type: original native macOS application icon for iMCP-HTTP, a small personal local server connecting AI tools to Mac services.
+Primary request: a radically simple, understated app icon. One bold abstract socket symbol: two clean opposing rounded brackets enclosing a single small rounded square, an open doorway to local tools. Strong unified graphic silhouette, balanced spacing, readable at 32px. No chain links or interlocking arches.
+Style: contemporary restrained graphic design, matte porcelain tile, nearly flat with only a subtle embossed edge on the symbol. Warm off-white rounded-square tile with dark graphite symbol and one small muted orange center square. Straight-on orthographic composition, no tilt.
+Composition: one icon, centered square canvas, roughly 8 percent transparent margin outside the rounded tile. Very clean edges. Transparent exterior, opaque tile. No surrounding scene or UI.
+Constraints: no text, letters, numbers, familiar corporate logos, Apple logo, robot, network diagram, glossy blue gradients, metallic material, glass, badges, watermark, or tiny details.

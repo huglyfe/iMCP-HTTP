@@ -8,11 +8,51 @@ case "$configuration" in
     *) echo "Usage: $0 [debug|release]" >&2; exit 2 ;;
 esac
 
-swift build --configuration "$configuration" --product IMCPHTTP
-bin_path="$(swift build --configuration "$configuration" --show-bin-path)"
-app_path="$PWD/dist/iMCP-HTTP.app"
-mkdir -p "$app_path/Contents/MacOS"
-cp "$bin_path/IMCPHTTP" "$app_path/Contents/MacOS/IMCPHTTP"
-cp App/Info.plist "$app_path/Contents/Info.plist"
-codesign --force --sign - "$app_path"
+app_path="${IMCP_BUILD_APP_PATH:-$PWD/dist/iMCP-HTTP.app}"
+if [[ "$app_path" != /*.app ]]; then
+    echo "IMCP_BUILD_APP_PATH must be an absolute .app path." >&2
+    exit 2
+fi
+mkdir -p "$(dirname "$app_path")"
+app_path="$(cd "$(dirname "$app_path")" && pwd -P)/$(basename "$app_path")"
+# Changing a running ad-hoc signed bundle can invalidate its Apple permissions.
+ensure_target_stopped() {
+python3 - "$app_path" <<'PYTHON'
+from pathlib import Path
+import subprocess
+import sys
+
+target = (Path(sys.argv[1]) / "Contents/MacOS/IMCPHTTP").resolve()
+processes = subprocess.check_output(["ps", "-axww", "-o", "comm="], text=True)
+for command in processes.splitlines():
+    command = command.strip()
+    if command.endswith("/Contents/MacOS/IMCPHTTP") and Path(command).resolve() == target:
+        raise SystemExit("Quit the target app or choose a different IMCP_BUILD_APP_PATH before rebuilding.")
+PYTHON
+}
+ensure_target_stopped
+
+swift build -j 2 --force-resolved-versions --configuration "$configuration" --product IMCPHTTP
+bin_path="$(swift build --force-resolved-versions --configuration "$configuration" --show-bin-path)"
+work_path="$(mktemp -d "$(dirname "$app_path")/.imcp-build.XXXXXX")"
+trap 'rm -rf "$work_path"' EXIT
+bundle="$work_path/iMCP-HTTP.app"
+mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
+cp "$bin_path/IMCPHTTP" "$bundle/Contents/MacOS/IMCPHTTP"
+shopt -s nullglob
+for resource in "$bin_path"/*.bundle; do
+    ditto "$resource" "$bundle/Contents/Resources/$(basename "$resource")"
+done
+cp App/Info.plist "$bundle/Contents/Info.plist"
+python3 scripts/bundle-notices.py "$bundle/Contents/Resources/Licenses"
+plutil -lint "$bundle/Contents/Info.plist"
+codesign --force --sign - "$bundle"
+codesign --verify --strict "$bundle"
+ensure_target_stopped
+# Replace only after a complete, verified build; stale resources never carry forward.
+if [[ -e "$app_path" ]]; then mv "$app_path" "$work_path/previous.app"; fi
+if ! mv "$bundle" "$app_path"; then
+    if [[ -e "$work_path/previous.app" ]]; then mv "$work_path/previous.app" "$app_path"; fi
+    exit 1
+fi
 echo "$app_path"

@@ -18,3 +18,8 @@ xcuserdata/
 *.db-wal
 *.sqlite*
 .runtime/
+*.log
+*.pem
+*.pfx
+__pycache__/
+*.pyc
