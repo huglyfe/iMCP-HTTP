@@ -1,6 +1,6 @@
 # Implementation plan
 
-Originally agreed 2026-10-02. This is the maintained implementation and acceptance plan for public source alpha candidate **0.5.0-alpha.3**. It records current behavior; superseded UI directions and machine-specific operational history are omitted.
+Originally agreed 2026-10-02. This is the maintained implementation and acceptance plan for public source alpha **0.5.0-alpha.3**. It records current behavior; superseded UI directions and machine-specific operational history are omitted.
 
 ## Product and settled decisions
 
@@ -21,7 +21,7 @@ iMCP-HTTP is a small native SwiftUI app giving approved AI clients access to App
 | Reminders vertical slice | Account/list/item management, date filters, completion, alarms, recurrence and exact write targets | Broader account restrictions and permission persistence |
 | Durable approval/app controls | Atomic grants/settings, refresh rotation, revoke, pause, single window/menu and macOS authentication | Native authentication cancellation/retry, signing and permission persistence |
 | Apple-service coverage | 68 tools across Reminders, Calendar, Contacts, Maps, Photos metadata, BLE, Mail and Notes | Native acceptance by service below |
-| Source alpha preparation | Apache-2.0, contributor workflow, pinned builds, dependency notices, isolated check bundles and public-facing documentation | GitHub CI on the final commit and explicit publication decision |
+| Source alpha publication | Apache-2.0, contributor workflow, pinned builds, dependency notices, isolated check bundles and public-facing documentation; implementation merged and repository made public | Tagged prerelease and binary distribution are separate future actions |
 
 Bluetooth pending operations use an enum. A first request waits up to 15 seconds for the manager to leave its initial unknown/resetting state; radio-off fails explicitly. Pause/disable/cancellation ends pending work and invalidates handles. Mail and Notes share one `AutomationRunner` owned by `AppRuntime`; separate runtime instances have independent execution slots. Tool contracts remain unchanged.
 
@@ -50,17 +50,13 @@ Prior client fixtures verified Codex registration/login, five fake services, res
 
 The old acceptance calendars and reminder lists were removed with fresh reads confirming absence. Notes deletion follows native Recently Deleted retention. No automated cleanup may touch personal records. Native visual confirmation of the service-switch dimming fix, sleep/wake, and memory under enabled-service workloads remain open.
 
-## Release scope and publication gates
+## Release scope and publication status
 
-The first public candidate is **0.5.0-alpha.3**. This release is source-only, with ad-hoc development bundles and explicit experimental-service limitations.
+The repository became public on 2026-10-16 after the owner's instruction. PR #1 merged the tested implementation into the default branch, `main`, at `f5aebd3`. Both timezone CI jobs passed on final PR commit `c2093ae`. Anonymous repository access was verified. The public source version is **0.5.0-alpha.3**; no GitHub release/tag or binary download has been published.
 
-Before publication:
+The approved brackets-and-orange-square artwork is now a build input at `App/AppIcon.png`. The build generates standard/Retina icon representations and embeds `AppIcon.icns` before signing; the app's Info.plist references that resource. The window title and README explicitly identify the public alpha. The menu-bar status indicator retains its existing state/approval symbols. Canonical checks passed all 84 tests and verified the bundle signature. Decoding the bundled icon confirmed all ten expected sizes, and an AppKit preview verified macOS resolves the approved artwork for the bundle. This packaging check did not launch the app or repeat native service acceptance.
 
-1. Pass canonical checks, the clean-checkout release build, and UTC/New York hosted CI on the candidate commit.
-2. Review the tracked files and all history that will become public for credentials, personal data, generated runtime artifacts, and attribution. Record the scope of the review without claiming a comprehensive security audit.
-3. Reconcile README, changelog, architecture, and this plan with actual implementation and acceptance evidence. Keep current native gaps visible.
-4. Review and merge the implementation pull request so the default branch contains the app. The existing default branch still contains only the early scaffold until that merge.
-5. Obtain an explicit owner instruction to change repository visibility and create the GitHub prerelease. Preparing the candidate does not publish it.
+Further changes use the canonical checks and disclose native acceptance gaps. Follow [CONTRIBUTING.md](../CONTRIBUTING.md#preparing-a-source-alpha) before creating a tagged prerelease. New release publication and production installation still require the owner's instruction.
 
 **Version 0.6** is planned for Developer ID-signed, notarized distribution and selected capabilities that require Apple developer provisioning. It includes the Apple Events entitlement needed by Mail/Notes under Hardened Runtime, first-install acceptance, and permission-persistence checks across two signed builds. Each new capability needs a separate feasibility and native-acceptance slice; a signature alone does not grant access. [WeatherKit](https://developer.apple.com/weatherkit/) is one candidate, subject to its capability and attribution requirements. Automatic updates are not required for the source alpha.
 

@@ -1,8 +1,13 @@
 # Changelog
 
-## 0.5.0-alpha.3 - unreleased
+## Unreleased
 
-First public source alpha candidate. Earlier alpha builds were private development builds.
+- Bundle the approved app icon for Finder, Dock, and Command-Tab using generated standard and Retina representations.
+- Label the main window and README explicitly as a public alpha.
+
+## 0.5.0-alpha.3 - source published 2026-10-16
+
+First public source alpha. Earlier alpha builds were private development builds. No tagged GitHub release or binary download was published.
 
 - Native Mac window and persistent menu-bar controls. Closing the window keeps the local server running.
 - Loopback Streamable HTTP MCP with OAuth dynamic registration, PKCE, macOS-authenticated approval, durable grants, refresh, pause, and revocation.

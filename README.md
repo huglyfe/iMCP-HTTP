@@ -1,8 +1,10 @@
 # iMCP-HTTP
 
+<img src="App/AppIcon.png" alt="iMCP-HTTP app icon" width="96" height="96">
+
 A native Mac app that gives approved AI clients access to Apple services through a local HTTP MCP server. One window manages services, individual tools, and connections; a compact menu-bar panel keeps the server within reach.
 
-**Public alpha candidate: 0.5.0-alpha.3.** Build from source on macOS 15 or later. APIs and saved-state formats may change. Bundles are ad-hoc signed development apps; notarized downloads and automatic updates are not provided. Native acceptance varies by service; the remaining gaps are listed below.
+**Public source alpha: 0.5.0-alpha.3. Experimental software; expect bugs and breaking changes.** Build from source on macOS 15 or later. APIs and saved-state formats may change. Bundles are ad-hoc signed development apps; notarized downloads and automatic updates are not provided. Native acceptance varies by service; the remaining gaps are listed below.
 
 ## Build and run
 
