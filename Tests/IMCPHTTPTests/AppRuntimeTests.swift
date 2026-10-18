@@ -6,6 +6,69 @@ import Testing
 
 @MainActor
 struct AppRuntimeTests {
+  @Test func permissionRecoveryPreservesPolicyAndClearsOnlyAfterSuccess() async throws {
+    let root = try directory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let listener = FixtureListener()
+    let access = FixtureAppleAccess()
+    let runtime = AppRuntime(
+      configuration: .init(), directory: root, runServer: listener.run,
+      accessOverrides: [.reminders: access])
+    runtime.start()
+    try await listener.waitForStart()
+    await listener.reportReady()
+    try await eventually { runtime.state == .running }
+    await runtime.setEnabled(.reminders, true)
+    #expect(!runtime.settings[.reminders])
+    #expect(runtime.serviceIssues[.reminders] != nil)
+    #expect(runtime.errorMessage == nil)
+    runtime.refreshServiceStatus()
+    #expect(runtime.serviceIssues[.reminders] != nil)
+    access.allowed = true
+    await runtime.setEnabled(.reminders, true)
+    #expect(runtime.settings[.reminders])
+    #expect(runtime.serviceIssues[.reminders] == nil)
+    #expect(
+      try ServiceSettings.load(from: root.appendingPathComponent("services.json"))[.reminders])
+    // A permission revoked in System Settings must surface without changing the owner's choice.
+    access.allowed = false
+    runtime.refreshServiceStatus()
+    #expect(runtime.settings[.reminders])
+    #expect(runtime.serviceIssues[.reminders] != nil)
+    access.allowed = true
+    runtime.refreshServiceStatus()
+    #expect(runtime.serviceIssues[.reminders] == nil)
+    await runtime.setEnabled(.reminders, false)
+    #expect(!access.enabled)
+    #expect(runtime.serviceIssues[.reminders] == nil)
+    await runtime.stop()
+  }
+
+  @Test func failedPermissionRequestCanBeRetriedWithoutSavingEnablement() async throws {
+    let root = try directory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let listener = FixtureListener()
+    let access = FixtureAppleAccess()
+    access.shouldThrow = true
+    let runtime = AppRuntime(
+      configuration: .init(), directory: root, runServer: listener.run,
+      accessOverrides: [.reminders: access])
+    runtime.start()
+    try await listener.waitForStart()
+    await runtime.setEnabled(.reminders, true)
+    #expect(runtime.serviceIssues[.reminders]?.contains("could not request") == true)
+    #expect(runtime.changingService == nil)
+    #expect(!runtime.settings[.reminders])
+    #expect(
+      !FileManager.default.fileExists(atPath: root.appendingPathComponent("services.json").path))
+    access.shouldThrow = false
+    access.allowed = true
+    await runtime.setEnabled(.reminders, true)
+    #expect(runtime.serviceIssues[.reminders] == nil)
+    #expect(runtime.settings[.reminders])
+    await runtime.stop()
+  }
+
   private func directory() throws -> URL {
     let url = FileManager.default.temporaryDirectory.appendingPathComponent(
       "imcp-runtime-\(UUID())")
@@ -130,6 +193,19 @@ struct AppRuntimeTests {
     #expect(
       !FileManager.default.fileExists(atPath: root.appendingPathComponent("services.json").path))
     await runtime.stop()
+  }
+}
+
+@MainActor
+private final class FixtureAppleAccess: AppleAccess {
+  var enabled = false
+  var allowed = false
+  var shouldThrow = false
+  var available: Bool { enabled && allowed }
+  func setEnabled(_ enabled: Bool) { self.enabled = enabled }
+  func requestAccess() async throws -> Bool {
+    if shouldThrow { throw CocoaError(.featureUnsupported) }
+    return allowed
   }
 }
 

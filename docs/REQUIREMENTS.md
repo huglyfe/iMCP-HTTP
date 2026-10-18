@@ -20,6 +20,10 @@ These are product contracts. Current implementation and verification limits are 
 
 ## Native interface
 
+- Show listener status and Start/Pause/Retry in both the window and compact panel. Starting and stopping cannot be triggered twice; failure must remain visible after an error message is dismissed.
+- Services use expandable groups, retaining every individual tool switch. Expand a newly enabled service or one with an access failure. Keep permission recovery beside that service with Privacy & Security and an explicit retry; never change saved enablement on denied access.
+- Show pending connection counts and a review action from other tabs. The empty Connections state leads to Setup. Provide Command-1/2/3 tab navigation, copy confirmation, and offline help through the toolbar and Help menu. Busy switches must block keyboard as well as pointer activation. Use native semantic colors and accessible labels.
+
 - One normal, resizable Mac window with a Dock icon and Command-Tab presence, plus a persistent menu-bar icon. Preserve Services, Connections, and Setup in a clearly spaced native tab strip below the title bar with one content area and no enclosing tab box; no sidebar redesign or duplicate Settings interface. Closing the window keeps access running; reopening presents the single window. Every Quit route stops the listener before termination.
 - Preserve the compact menu panel with its server/service switches, pending approvals, Open, and Quit. It omits setup commands and the app-name subtitle. Services retains distinct colors for each service. Setup contains an alphabetical, searchable client directory with instructions, copyable configuration, vendor links, and honest compatibility labels. Hosted clients that cannot reach loopback have explanatory entries rather than nonfunctional setup commands.
 - The main window exposes individual tools within each service, client approval/revocation, and connection setup. Tool choices are global across all approved clients and available accounts, not client-specific permissions.

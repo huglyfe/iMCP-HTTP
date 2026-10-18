@@ -65,6 +65,8 @@ IMCP_HTTP_DATA_DIR="$acceptance_dir" IMCP_HTTP_PORT=19875 \
 
 Temporary state isolates application settings and grants; macOS permissions still belong to the signed app identity. Do not reset production privacy settings or rebuild a running bundle. Use the [native acceptance checklist](docs/PLAN.md#native-acceptance), visibly disposable records/devices, independent readback in the Apple app, and verified cleanup. Revoke temporary grants, remove temporary client entries, quit the test app, and delete only the temporary state you created afterward.
 
+For visual acceptance of a debug build, add `IMCP_HTTP_PREVIEW_APPEARANCE=light` or `dark` to that isolated launch. This affects only the app's presentation and is ignored by release builds; it does not change macOS appearance settings. Check both appearances, 580 × 540 minimum content size, keyboard tab shortcuts, expandable service controls, empty/search/error states, and Help. Native accessibility-tree inspection does not replace a full VoiceOver pass.
+
 ## Pull requests and reports
 
 Describe the concrete behavior change, the checks run, and any native acceptance still missing. Use synthetic examples and metadata-only logs. Never include tokens, grants, account names, Apple content, signing material, or screenshots of unrelated data. Report the macOS/Xcode version, service/tool, expected result, and a disposable reproduction.
@@ -73,6 +75,8 @@ Original contributions are made under Apache-2.0. Preserve third-party copyright
 
 ## Preparing a source alpha
 
+For future binary archives, Developer ID signing, notarization, and Homebrew packaging, see [Distribution](docs/DISTRIBUTION.md). The existing build script remains a local ad-hoc builder.
+
 1. Update the MCP version in `MCPGateway.swift`, the numeric bundle version/build in `App/Info.plist`, and the README/changelog. Repository checks catch version drift.
 2. Run canonical checks and build an optimized bundle. Verify a clean source checkout can run the documented workflow without ignored local files or research repositories.
 3. Review tracked files and all history being published for credentials and personal data. Keep generated apps, logs, runtime stores, local inspiration checkouts, and signing assets out of Git.
@@ -80,3 +84,16 @@ Original contributions are made under Apache-2.0. Preserve third-party copyright
 5. Review the final commit and GitHub CI, then obtain the owner's explicit publication instruction before changing repository visibility or creating a public release. Mark the GitHub release as a prerelease. Source publication and signed/notarized binary distribution are separate decisions.
 
 The [plan](docs/PLAN.md) owns remaining milestones; avoid parallel roadmaps or machine-specific operational diaries in the repository.
+
+## Packaging a local preview
+
+After building the app, create an explicitly labeled development archive:
+
+```sh
+./scripts/build-app.sh release
+python3 scripts/package-app.py dist/iMCP-HTTP.app --development
+```
+
+Archives and adjacent `.sha256` files go to `dist/packages/`. Names include the bundle version, build number, and actual architecture. Existing outputs are refused; use `--output-dir` for a separate test run. Do not modify the input bundle while packaging. The source build still uses the host architecture.
+
+Omitting `--development` requires an already Developer ID-signed, hardened, notarized, and stapled app that passes Gatekeeper. Packaging does not perform those steps or publish anything. The four synthetic packaging tests run in `check.sh` and cover archive contents/checksums, overwrite refusal, unsupported architecture, ad-hoc release rejection, and missing notarization. Real signature and ticket acceptance remain separate.

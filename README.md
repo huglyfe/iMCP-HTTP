@@ -2,9 +2,9 @@
 
 <img src="App/AppIcon.png" alt="iMCP-HTTP app icon" width="96" height="96">
 
-A native Mac app that gives approved AI clients access to Apple services through a local HTTP MCP server. One window manages services, individual tools, and connections; a compact menu-bar panel keeps the server within reach.
+A native Mac app that gives approved AI clients access to Apple services through a local HTTP MCP server. One window manages expandable services, individual tools, and connections; a compact menu-bar panel keeps the server within reach. Both show server status and Start/Pause/Retry controls.
 
-**Public source alpha: 0.5.0-alpha.3. Experimental software; expect bugs and breaking changes.** Build from source on macOS 15 or later. APIs and saved-state formats may change. Bundles are ad-hoc signed development apps; notarized downloads and automatic updates are not provided. Native acceptance varies by service; the remaining gaps are listed below.
+**v0.6 development preview: 0.6.0-alpha.1. Experimental software; expect bugs and breaking changes.** Build from source on macOS 15 or later. APIs and saved-state formats may change. Bundles are ad-hoc signed development apps; notarized downloads and automatic updates are not provided. Native acceptance varies by service; the remaining gaps are listed below.
 
 ## Build and run
 
@@ -72,9 +72,11 @@ Automated checks use fake service data, isolated temporary state, a real loopbac
 
 ## Release scope
 
-The public alpha is available as source. There is no tagged release or downloadable app yet. Version 0.6 is planned for Developer ID-signed, notarized downloads, permission-persistence testing across updates, and selected services that require Apple capabilities. Each service still needs its own entitlement, provisioning, and native acceptance; signing alone does not enable it. Automatic updates are not part of the current release.
+This branch develops v0.6. The published 0.5.0-alpha.3 alpha is available as source. There is no tagged release or downloadable app yet. Version 0.6 is planned for Developer ID-signed, notarized downloads, permission-persistence testing across updates, and selected services that require Apple capabilities. Each service still needs its own entitlement, provisioning, and native acceptance; signing alone does not enable it. Local development ZIPs and checksums can be created with the [packaging workflow](CONTRIBUTING.md#packaging-a-local-preview). Automatic updates are not part of the current release.
 
 ## Feedback
+
+See [setup and troubleshooting](docs/HELP.md) for connection problems, permissions, updates, and removal. The [distribution guide](docs/DISTRIBUTION.md) explains the planned signed downloads and Homebrew cask.
 
 [Report a bug](https://github.com/huglyfe/iMCP-HTTP/issues/new?template=bug_report.yml) with your macOS version, the affected service or client, and steps using disposable data. Check the alpha limitations above first. Keep credentials, account details, and personal Apple content out of reports and screenshots.
 

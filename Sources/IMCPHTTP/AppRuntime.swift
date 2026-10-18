@@ -38,6 +38,8 @@ final class AppRuntime: ObservableObject {
   private lazy var notes = NativeNotes(runner: automation)
   @Published private(set) var settings = ServiceSettings()
   @Published private(set) var serviceStatus: [AppleService: String] = [:]
+  @Published private(set) var serviceIssues: [AppleService: String] = [:]
+  private let accessOverrides: [AppleService: any AppleAccess]
   @Published private(set) var changingService: AppleService?
   @Published private(set) var changingTool: String?
   @Published private(set) var tools: [ServiceTool] = []
@@ -45,15 +47,16 @@ final class AppRuntime: ObservableObject {
     reminders: reminders, calendar: calendar, contacts: contacts, maps: maps, photos: photos,
     bluetooth: bluetooth, mail: mail, notes: notes)
   private func access(_ service: AppleService) -> any AppleAccess {
+    if let override = accessOverrides[service] { return override }
     switch service {
-    case .photos: photos
-    case .bluetooth: bluetooth
-    case .mail: mail
-    case .notes: notes
-    case .reminders: reminders
-    case .calendar: calendar
-    case .contacts: contacts
-    case .maps: maps
+    case .photos: return photos
+    case .bluetooth: return bluetooth
+    case .mail: return mail
+    case .notes: return notes
+    case .reminders: return reminders
+    case .calendar: return calendar
+    case .contacts: return contacts
+    case .maps: return maps
     }
   }
   private var directoryLock: StateDirectoryLock?
@@ -86,7 +89,8 @@ final class AppRuntime: ObservableObject {
     runServer: @escaping ServerRunner = { server, ready in try await server.run(onReady: ready) },
     saveSettings: @escaping (ServiceSettings, URL) throws -> Void = { try $0.save(to: $1) },
     ownerAuthentication: any OwnerAuthenticating = MacOwnerAuthentication(),
-    authorization: AuthorizationStore? = nil
+    authorization: AuthorizationStore? = nil,
+    accessOverrides: [AppleService: any AppleAccess] = [:]
   ) {
     self.configuration = configuration
     storeURL = directory.appendingPathComponent("grants.json")
@@ -94,6 +98,7 @@ final class AppRuntime: ObservableObject {
     self.saveSettings = saveSettings
     self.ownerAuthentication = ownerAuthentication
     self.authorization = authorization
+    self.accessOverrides = accessOverrides
   }
 
   deinit {
@@ -207,13 +212,21 @@ final class AppRuntime: ObservableObject {
 
   func refreshServiceStatus() {
     guard settingsLoaded else { return }
-    for service in AppleService.allCases { serviceStatus[service] = access(service).status }
+    for service in AppleService.allCases {
+      serviceStatus[service] = access(service).status
+      // Preserve a failed enable attempt until an explicit retry or successful recovery.
+      if settings[service] {
+        if service == .bluetooth && state != .running { continue }
+        serviceIssues[service] = access(service).available ? nil : access(service).status
+      }
+    }
   }
 
   private func didStart() {
     guard state == .starting, !Task.isCancelled else { return }
     bluetooth.resume()
     state = .running
+    refreshServiceStatus()
   }
 
   func stop() async {
@@ -296,17 +309,20 @@ final class AppRuntime: ObservableObject {
   func setEnabled(_ service: AppleService, _ enabled: Bool) async {
     guard settingsLoaded, changingService == nil, changingTool == nil else { return }
     changingService = service
-    defer { changingService = nil }
+    defer {
+      changingService = nil
+      serviceStatus[service] = access(service).status
+    }
     if enabled {
       do {
         guard try await access(service).requestAccess() else {
-          errorMessage =
-            "Access was not granted. Allow \(service.title) in System Settings → Privacy & Security."
+          serviceIssues[service] =
+            "Access was not granted. Review \(service.title) in Privacy & Security, then try again."
           return
         }
       } catch {
-        errorMessage =
-          "macOS could not request \(service.title) access. Check System Settings → Privacy & Security."
+        serviceIssues[service] =
+          "macOS could not request access. Review Privacy & Security, then try again."
         return
       }
     }
@@ -316,6 +332,7 @@ final class AppRuntime: ObservableObject {
       try saveSettings(updated, settingsURL)
       access(service).setEnabled(enabled)
       settings = updated
+      serviceIssues[service] = nil
       serviceStatus[service] = access(service).status
     } catch {
       errorMessage =

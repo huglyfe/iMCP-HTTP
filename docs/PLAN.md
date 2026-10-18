@@ -1,6 +1,6 @@
 # Implementation plan
 
-Implementation milestones and acceptance status for public source alpha **0.5.0-alpha.3**. Contributor commands live in [CONTRIBUTING.md](../CONTRIBUTING.md); protocol and data contracts live in [REQUIREMENTS.md](REQUIREMENTS.md).
+Implementation milestones and acceptance status for **0.6.0-alpha.1 development** on `v0.6`. The published source alpha remains **0.5.0-alpha.3**. Contributor commands live in [CONTRIBUTING.md](../CONTRIBUTING.md); protocol and data contracts live in [REQUIREMENTS.md](REQUIREMENTS.md).
 
 ## Product and settled decisions
 
@@ -27,7 +27,7 @@ iMCP-HTTP is a small native SwiftUI app giving approved AI clients access to App
 
 The source alpha uses disposable fixtures, unsaved native value objects, isolated OAuth state, and loopback HTTP tests. Automated checks never read or mutate saved Apple records, initialize the Bluetooth radio, or call live Maps. Native acceptance below is prior manual evidence, not a claim that every service or account type is fully tested.
 
-Canonical checks cover 84 tests (11 app/runtime and 73 core), formatting, repository metadata and local links, builds, dependency notices, and bundle signatures. They pass locally and in hosted CI under UTC and America/New_York. A fresh source checkout also passed the canonical check and an optimized release build. Cross-timezone Calendar fixtures cover civil-date preservation, DST, and multi-day ranges; they do not replace saved-record acceptance.
+Canonical checks now cover 86 Swift tests (13 app/runtime and 73 core), four synthetic packaging tests, formatting, repository metadata and local links, builds, dependency notices, and bundle signatures. The v0.6 changes pass locally; hosted CI has not run on this branch. The published alpha passed hosted CI under UTC and America/New_York. A fresh source checkout also passed the canonical check and an optimized release build. Cross-timezone Calendar fixtures cover civil-date preservation, DST, and multi-day ranges; they do not replace saved-record acceptance.
 
 A targeted pre-publication review found no common credential/private-key patterns, personal-email domains, absolute user-home paths, or runtime artifacts in the reviewed history. This was not a comprehensive secret or security audit. Build packaging verifies notices for all 30 resolved dependencies.
 
@@ -55,6 +55,22 @@ Further changes use the canonical checks and disclose native acceptance gaps. Fo
 **Version 0.6** is planned for Developer ID-signed, notarized distribution and selected capabilities that require Apple developer provisioning. It includes the Apple Events entitlement needed by Mail/Notes under Hardened Runtime, first-install acceptance, and permission-persistence checks across two signed builds. Each new capability needs a separate feasibility and native-acceptance slice; a signature alone does not grant access. [WeatherKit](https://developer.apple.com/weatherkit/) is one candidate, subject to its capability and attribution requirements. Automatic updates are not required for the source alpha.
 
 Future service constraints are summarized in [INSPIRATION.md](INSPIRATION.md#coverage-and-remaining-boundaries). Add one complete service at a time. Measure Mail/Notes search performance with disposable data before introducing batching or other optimization.
+
+## Distribution readiness
+
+The [distribution guide](DISTRIBUTION.md) documents the proposed release process; [user help](HELP.md) covers setup, permissions, updates, and removal. Local preview archives and verification are implemented; signing automation, notarization, and publication remain pending.
+
+- [x] Document current source-build limits and the Developer ID/Homebrew path.
+- [x] Add versioned archive and checksum tooling with explicit architecture validation and overwrite refusal. Preserve the existing ad-hoc development build path. A development ZIP was extracted and its signature, notices, and checksum verified; public mode rejected the ad-hoc app.
+- [ ] Add Developer ID signing, Hardened Runtime entitlements, notarization, stapling, and artifact verification after enrollment. Keep signing credentials outside source control.
+- [ ] Verify a downloaded app's first launch and two-build upgrade, including permissions, saved grants, revocations, and Mail/Notes Automation. Test ad-hoc-to-signed installation separately.
+- [ ] Prepare and validate a maintainer-owned Homebrew cask against the final release artifact; test install, upgrade, and uninstall before publication.
+- [x] Implement compact expandable service groups, independent accessible switches, server controls, persistent permission recovery, approval navigation, copy confirmation, and offline Help.
+- [x] Exercise the preview with isolated state: keyboard tab navigation, connection empty-state navigation, search/no-results, copy confirmation, pause, Help toolbar/menu and Escape, Maps enablement and individual-tool persistence across restart, a disposable approval request and denial, listener survival after window close, and native port-conflict failure/dismissal/Retry. Both light and dark appearances were inspected at 580-point width. No Apple records were queried or changed; the disposable registration and settings were removed after quitting.
+- [ ] Complete full VoiceOver, minimum-height layout, native permission-denied recovery, and durable documentation screenshots. Accessibility-tree checks verified separate expand buttons and service/tool switches; fixture tests verified permission denial/retry and externally revoked access. These do not establish native TCC acceptance.
+- [ ] Publish the binary prerelease and tap only with explicit owner instruction, then verify the public download and installation path.
+
+Finish distribution and existing-service acceptance before making new provisioned services a release dependency. Homebrew can provide upgrades initially; an in-app updater is separate work.
 
 ## Native acceptance
 

@@ -35,6 +35,8 @@ Apple's [Window and MenuBarExtra guidance](https://developer.apple.com/videos/pl
 
 ## Coverage and remaining boundaries
 
+For v0.6, the public presentation of [Settings](https://github.com/sindresorhus/Settings) (MIT), [OnlySwitch](https://github.com/JackLandrin/OnlySwitch), and [Latest](https://github.com/mangerlahn/Latest) (GPL-3.0) was reviewed for interaction and distribution examples. Retain compact native navigation, make actions and state visible, and separate downloadable-app instructions from source development. These are presentation references only: no code, artwork, or dependencies were copied. Latest's license does not apply to this independently implemented interface.
+
 The [tool contracts](REQUIREMENTS.md#common-tool-contract) describe implemented capabilities; the [plan](PLAN.md#verification-boundary) records native acceptance. Future work must stay within the following boundaries.
 
 | Area | Constraint |

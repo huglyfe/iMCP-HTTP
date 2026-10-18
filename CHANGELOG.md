@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.6.0-alpha.1 - unreleased
+
+- Show server status and Start/Pause/Retry controls in both the window and menu panel.
+- Keep permission failures beside the affected service, with Privacy & Security and retry actions.
+- Surface pending approvals across tabs, add an actionable connection empty state, and confirm clipboard copies.
+- Add offline in-app help, keyboard tab shortcuts, clearer accessibility labels, and busy controls that also block keyboard activation.
+- Add verified, architecture-labeled ZIP archives and checksums. Public archives require Developer ID, Hardened Runtime, a stapled ticket, and Gatekeeper acceptance; ad-hoc previews require an explicit development flag.
+- Document troubleshooting and the Homebrew distribution path.
 
 - Bundle the approved app icon for Finder, Dock, and Command-Tab using generated standard and Retina representations.
 - Label the main window and README explicitly as a public alpha.
