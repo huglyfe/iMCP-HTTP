@@ -11,11 +11,17 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def anchors(path):
-    """GitHub-style heading anchors, ignoring fenced code blocks."""
-    text = re.sub(r"^```.*?^```", "", path.read_text(), flags=re.M | re.S)
-    return {re.sub(r"[^\w\- ]", "", heading.strip().lower()).replace(" ", "-")
-            for heading in re.findall(r"^#{1,6} (.+)$", text, flags=re.M)}
+def anchors(markdown):
+    """GitHub heading anchors: visible text slugged, repeats suffixed -1, -2, ..."""
+    text = re.sub(r"^(```|~~~).*?^\1", "", markdown, flags=re.M | re.S)
+    seen, result = {}, set()
+    for heading in re.findall(r"^#{1,6} (.+?)\s*$", text, flags=re.M):
+        visible = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", heading)
+        slug = re.sub(r"[^\w\- ]", "", visible.lower()).replace(" ", "-")
+        count = seen.get(slug, 0)
+        seen[slug] = count + 1
+        result.add(f"{slug}-{count}" if count else slug)
+    return result
 
 
 def main():
@@ -43,7 +49,7 @@ def main():
                 linked = path.parent / unquote(url.path) if url.path else path
                 if url.path.startswith("/") or not linked.exists():
                     errors.append(f"Nonportable or broken local link in {name}: {target}")
-                elif url.fragment and linked.suffix == ".md" and url.fragment not in anchors(linked):
+                elif url.fragment and linked.suffix == ".md" and url.fragment not in anchors(linked.read_text()):
                     errors.append(f"Broken heading link in {name}: {target}")
     info = plistlib.loads((ROOT / "App/Info.plist").read_bytes())
     gateway = (ROOT / "Sources/IMCPCore/Server/MCPGateway.swift").read_text()
