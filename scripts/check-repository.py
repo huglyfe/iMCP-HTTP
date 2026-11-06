@@ -11,6 +11,13 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def anchors(path):
+    """GitHub-style heading anchors, ignoring fenced code blocks."""
+    text = re.sub(r"^```.*?^```", "", path.read_text(), flags=re.M | re.S)
+    return {re.sub(r"[^\w\- ]", "", heading.strip().lower()).replace(" ", "-")
+            for heading in re.findall(r"^#{1,6} (.+)$", text, flags=re.M)}
+
+
 def main():
     paths = subprocess.check_output(
         ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"], cwd=ROOT
@@ -31,11 +38,13 @@ def main():
         if path.suffix == ".md":
             for target in re.findall(r"\]\(([^\s)]+)\)", path.read_text()):
                 url = urlsplit(target)
-                if url.scheme or not url.path:
+                if url.scheme:
                     continue
-                linked = path.parent / unquote(url.path)
+                linked = path.parent / unquote(url.path) if url.path else path
                 if url.path.startswith("/") or not linked.exists():
                     errors.append(f"Nonportable or broken local link in {name}: {target}")
+                elif url.fragment and linked.suffix == ".md" and url.fragment not in anchors(linked):
+                    errors.append(f"Broken heading link in {name}: {target}")
     info = plistlib.loads((ROOT / "App/Info.plist").read_bytes())
     gateway = (ROOT / "Sources/IMCPCore/Server/MCPGateway.swift").read_text()
     version = re.search(r'var serverVersion: String \{ "([^"]+)" \}', gateway).group(1)

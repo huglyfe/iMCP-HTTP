@@ -6,7 +6,7 @@ This guide describes the planned binary release process. Day-to-day developer co
 
 ## Before Apple enrollment
 
-Documentation, archive tooling, and version checks can be developed with the existing toolchain. The [local preview workflow](../CONTRIBUTING.md#packaging-a-local-preview) is implemented. Keep development artifacts clearly labeled. An ad-hoc signature is not evidence that a downloaded app will pass Gatekeeper.
+Documentation, archive tooling, and version checks can be developed with the existing toolchain. The [local preview workflow](../CONTRIBUTING.md#releasing) is implemented. Keep development artifacts clearly labeled. An ad-hoc signature is not evidence that a downloaded app will pass Gatekeeper.
 
 Start with one versioned ZIP containing `iMCP-HTTP.app`, its embedded licenses, and a published SHA-256 checksum. A disk image can be added if a drag-to-Applications installer would help direct-download users. A privileged package installer is unnecessary for this app.
 

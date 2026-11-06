@@ -35,7 +35,7 @@ open dist/iMCP-HTTP.app
 
 `check.sh` passes extra arguments through to `swift test`. It builds into `.build/check/iMCP-HTTP.app` so it never replaces the app you're running; `build-app.sh` builds into `dist/`. Set `IMCP_BUILD_APP_PATH` to an absolute path to choose another location. Builds are staged in a fresh directory and verified before replacing the output, and `build-app.sh` refuses to overwrite an app that is currently running.
 
-`scripts/check-repository.py` checks local Markdown links, version consistency, Python syntax, and accidentally committed runtime files. It is not a secret scanner.
+`scripts/check-repository.py` checks local Markdown links and heading anchors, version consistency, Python syntax, and accidentally committed runtime files. It is not a secret scanner.
 
 CI runs `check.sh` on every pull request and on pushes to `main`, using macOS 15 and Xcode 26.3, once in UTC and once in America/New_York to catch timezone and DST bugs.
 
@@ -43,12 +43,10 @@ CI runs `check.sh` on every pull request and on pushes to `main`, using macOS 15
 
 Tests use Swift Testing. Use `#expect` and `#require` directly so failures show the actual values, assert exact error codes for contract failures, and give every asynchronous wait a deadline.
 
-| Target | Covers |
-| --- | --- |
-| `IMCPCoreTests` | Authorization, persistence, HTTP/MCP contracts, input validation, native value mapping, scripting and BLE state. Shared fakes live in `Fixtures/`. |
-| `IMCPHTTPTests` | Runtime lifecycle, approval authentication, client setup recipes |
-| `ScriptExecutionTests` | Apple-event values, sanitized errors, interpreter deadlines, script compilation. Mail and Notes handlers are not executed. |
-| `ClientAcceptanceTests` | Opt-in end-to-end checks with real client CLIs |
+There are two test targets:
+
+- `IMCPCoreTests` covers authorization, persistence, HTTP/MCP contracts, input validation, native value mapping, and BLE state. Shared fakes live in its `Fixtures/` directory. Two suites deserve a note: `ScriptExecutionTests` covers Apple-event values, sanitized errors, interpreter deadlines, and script compilation without executing the Mail and Notes handlers, and `ClientAcceptanceTests` holds the opt-in end-to-end checks with real client CLIs.
+- `IMCPHTTPTests` covers the runtime lifecycle, approval authentication, and client setup recipes.
 
 Automated tests must never touch real Apple records, initialize the Bluetooth radio, or call live Maps. Listener tests use loopback ports 19765 and 19767, so keep those free.
 

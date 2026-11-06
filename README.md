@@ -73,15 +73,15 @@ Automated tests run against fake services, isolated state, and a real loopback l
 | Service | Verified on real data | Not yet verified |
 | --- | --- | --- |
 | Reminders | Create, edit, complete, move, delete; alarms, recurrence, due-date filtering | Shared and read-only accounts |
-| Calendar | Create, edit, move, delete; recurring series; all-day events across DST | Latest timezone fixes on saved events; shared accounts |
-| Contacts | Create, edit, delete cards; custom labels | Groups, organization cards |
+| Calendar | Create, edit, move, delete; recurring series; all-day events across DST | The latest schedule fixes (edits that omit `allDay`, cross-timezone conversion) on saved events; shared accounts |
+| Contacts | Create, edit, delete cards; custom labels | Groups, organization cards, account restrictions |
 | Notes | Create, search, edit, append, move, delete | Locked notes, attachments, cross-account moves |
 | Mail | Account and mailbox discovery, search, read | All mutations |
-| Photos | Album discovery | Populated libraries, filters, paging |
+| Photos | Album discovery, empty-library reads | Populated libraries, filters, paging, hidden-asset exclusion, permission changes |
 | Maps | Search, walking directions | Driving directions |
-| Bluetooth LE | Scanning | GATT operations against a real peripheral |
+| Bluetooth LE | Scanning | GATT operations and notifications with a real peripheral, permission flows |
 
-Also still open: permission persistence across signed updates, authentication cancel/retry, and sleep/wake. Apple can reject or normalize writes, and an interrupted write may have completed anyway, so inspect the record before retrying.
+Also still open: permission persistence across signed updates, authentication cancel/retry, sleep/wake, memory use with many services enabled, and a full VoiceOver pass. Apple can reject or normalize writes, and an interrupted write may have completed anyway, so inspect the record before retrying.
 
 ## Documentation
 
