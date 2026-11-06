@@ -12,4 +12,4 @@ export IMCP_BUILD_APP_PATH="${IMCP_BUILD_APP_PATH:-$PWD/.build/check/iMCP-HTTP.a
 ./scripts/build-app.sh debug
 git diff --check
 git diff --cached --check
-echo "Repository, tests, build, bundle, and formatting checks passed. See docs/PLAN.md for native acceptance."
+echo "Repository, tests, build, bundle, and formatting checks passed."

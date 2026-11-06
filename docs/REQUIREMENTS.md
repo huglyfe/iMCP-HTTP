@@ -1,6 +1,6 @@
 # Behavior requirements
 
-These are product contracts. Current implementation and verification limits are described in `ARCHITECTURE.md` and `PLAN.md`.
+These are the product contracts. [ARCHITECTURE.md](ARCHITECTURE.md) describes how they are implemented, and the [README](../README.md#status) lists what has been verified against real Apple data.
 
 ## OAuth and owner approval
 

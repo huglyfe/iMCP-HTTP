@@ -1,6 +1,6 @@
 # Setup and troubleshooting
 
-Start with the [source build instructions](../README.md#build-and-run). The alpha has no downloadable installer or Homebrew cask yet. A developer account is not needed for the documented local ad-hoc build.
+Start with the [build instructions](../README.md#quick-start). There is no downloadable installer or Homebrew cask yet, and you don't need an Apple developer account to build locally.
 
 ## First connection
 
@@ -40,4 +40,4 @@ To remove the app, revoke its client connections, remove the corresponding clien
 
 Include the app version, macOS version, affected service/client, expected result, actual result, and steps using disposable data in a [bug report](https://github.com/huglyfe/iMCP-HTTP/issues/new?template=bug_report.yml). Include an error code if available. Exclude tokens, account names, record content, state files, and screenshots of unrelated data.
 
-Check the [acceptance gaps](PLAN.md#verification-boundary) before treating an untested account or device workflow as supported.
+Check the [verification status](../README.md#status) before relying on a workflow that hasn't been tested against real data.

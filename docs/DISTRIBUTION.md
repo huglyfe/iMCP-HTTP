@@ -2,7 +2,7 @@
 
 The current alpha is built from source. `scripts/build-app.sh` produces an ad-hoc signed development app for the build machine's architecture. `scripts/package-app.py` now creates verified, versioned ZIP archives and checksums; ad-hoc apps require an explicit `--development` flag. Neither script creates a universal binary, Developer ID signature, or notarization ticket. There is no Homebrew cask yet.
 
-This guide describes the proposed binary release process. Completion and acceptance belong in [PLAN.md](PLAN.md#distribution-readiness); ordinary developer commands belong in [CONTRIBUTING.md](../CONTRIBUTING.md).
+This guide describes the planned binary release process. Day-to-day developer commands are in [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## Before Apple enrollment
 
@@ -27,7 +27,7 @@ The release pipeline still needs to implement and verify these steps:
 5. Test the downloaded artifact through Gatekeeper on a clean Mac or test account, including offline launch after download. Test first permission requests, OAuth approval, and Mail/Notes Automation under Hardened Runtime.
 6. Install a second signed build over the first after quitting it. Verify settings, grants, revocations, and Apple permissions. Also test the transition from an ad-hoc development install; do not promise that its permissions will carry over.
 
-Signing and notarization do not grant Apple-data permissions or establish service correctness. Run the relevant disposable [native acceptance](PLAN.md#native-acceptance) on the packaged app.
+Signing and notarization do not grant Apple-data permissions or establish service correctness. Repeat the [manual service tests](../CONTRIBUTING.md#testing-against-real-apple-services) on the packaged app.
 
 ## Homebrew
 
@@ -47,5 +47,3 @@ Validate the cask's syntax, style, audit results, installation, upgrade, and uni
 Publish the app release before updating the cask to its URL and checksum. Users can then update through Homebrew after quitting the app; an in-app updater is a separate feature.
 
 Inclusion in the official `homebrew/cask` repository is a later submission, subject to its [acceptance policy](https://docs.brew.sh/Acceptable-Casks). That policy requires supported-platform compatibility, verifiable upstream downloads, Gatekeeper checks, and shared package acceptance criteria. A personal tap does not imply official Homebrew review or endorsement.
-
-Creating a public release or tap requires the owner's explicit publication instruction. Preparing files locally does not publish them.
