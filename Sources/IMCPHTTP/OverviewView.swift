@@ -8,22 +8,7 @@ struct OverviewView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      HStack {
-        Text("iMCP-HTTP").font(.headline)
-        Spacer()
-        Toggle(
-          "Enable MCP Server",
-          isOn: Binding(
-            get: { runtime.state == .running },
-            set: { enabled in
-              if enabled { runtime.start() } else { Task { await runtime.stop() } }
-            })
-        )
-        .toggleStyle(.switch).labelsHidden()
-        .help(runtime.state.title)
-        .accessibilityValue(runtime.state.title)
-        .disabled(runtime.state == .starting || runtime.state == .stopping)
-      }
+      ServerStatusView(runtime: runtime)
       Divider()
       Text("Services").font(.caption).foregroundStyle(.secondary)
       ForEach(AppleService.allCases) { service in
@@ -51,7 +36,7 @@ struct OverviewView: View {
     }
     .buttonStyle(.plain)
     .padding(14)
-    .frame(width: 300)
+    .frame(width: 320)
     .onAppear { runtime.refreshServiceStatus() }
   }
 }
@@ -63,6 +48,7 @@ struct ServiceRow: View {
   var body: some View {
     HStack(spacing: 10) {
       Image(systemName: service.icon)
+        .accessibilityHidden(true)
         .foregroundStyle(runtime.settings[service] ? .white : service.color)
         .frame(width: 26, height: 26)
         .background(
@@ -76,9 +62,18 @@ struct ServiceRow: View {
       )
       .toggleStyle(.switch).controlSize(.small)
       .tint(service.color)
-      .disabled(runtime.changingService == service)
-      // Preserve unrelated switches' appearance while the runtime serializes changes.
-      .allowsHitTesting(runtime.changingService == nil && runtime.changingTool == nil)
+      .disabled(runtime.changingService != nil || runtime.changingTool != nil)
+      .accessibilityValue(
+        runtime.serviceIssues[service] ?? runtime.serviceStatus[service] ?? "Disabled")
+      if runtime.changingService == service {
+        ProgressView().controlSize(.small).accessibilityLabel(
+          "Requesting access to \(service.title)")
+      }
+      if runtime.serviceIssues[service] != nil {
+        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+          .accessibilityLabel(
+            "\(service.title) needs attention. Open the main window to resolve it.")
+      }
     }
     .help(runtime.serviceStatus[service] ?? "Disabled")
   }
@@ -125,8 +120,9 @@ struct ApprovalsView: View {
           .font(.caption).foregroundStyle(.secondary)
         Text("Client ID: \(request.clientID)").font(.caption.monospaced()).textSelection(.enabled)
         Text(request.callback).font(.caption.monospaced()).textSelection(.enabled)
+          .lineLimit(2).truncationMode(.middle).help(request.callback)
         HStack {
-          Button("Deny", role: .cancel) { Task { await runtime.decide(request, approve: false) } }
+          Button("Deny") { Task { await runtime.decide(request, approve: false) } }
           Spacer()
           if runtime.authenticatingRequestID == request.id {
             ProgressView().controlSize(.small)
@@ -138,6 +134,8 @@ struct ApprovalsView: View {
           .disabled(runtime.authenticatingRequestID != nil || runtime.state != .running)
         }
       }
+      .padding(12)
+      .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
     }
   }
 }

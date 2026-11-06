@@ -5,6 +5,7 @@ struct SetupView: View {
   let resource: String
   @State private var search = ""
   @State private var selection: String? = "codex"
+  @State private var copied: String?
   private var clients: [ClientSetup] {
     ClientSetup.matching(search, in: ClientSetup.clients(resource: resource))
   }
@@ -16,8 +17,11 @@ struct SetupView: View {
       HStack {
         Text(resource).font(.caption.monospaced()).textSelection(.enabled)
         Spacer()
-        Button("Copy address", systemImage: "doc.on.doc") { copy(resource) }
-          .labelStyle(.iconOnly).help("Copy server address")
+        Button(
+          copied == resource ? "Copied" : "Copy address",
+          systemImage: copied == resource ? "checkmark" : "doc.on.doc"
+        ) { copy(resource) }
+        .help("Copy server address")
       }
       TextField("Search clients", text: $search)
         .textFieldStyle(.roundedBorder)
@@ -46,7 +50,10 @@ struct SetupView: View {
                 VStack(alignment: .leading, spacing: 8) {
                   Text(configuration).font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                  Button("Copy configuration", systemImage: "doc.on.doc") { copy(configuration) }
+                  Button(
+                    copied == configuration ? "Copied" : "Copy configuration",
+                    systemImage: copied == configuration ? "checkmark" : "doc.on.doc"
+                  ) { copy(configuration) }
                 }
                 .padding(12).frame(maxWidth: .infinity, alignment: .leading)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
@@ -66,10 +73,15 @@ struct SetupView: View {
     .onChange(of: search) { _, _ in
       if !clients.contains(where: { $0.id == selection }) { selection = clients.first?.id }
     }
+    .task(id: copied) {
+      guard copied != nil else { return }
+      do { try await Task.sleep(for: .seconds(2)) } catch { return }
+      copied = nil
+    }
   }
 
   private func copy(_ value: String) {
     NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(value, forType: .string)
+    if NSPasteboard.general.setString(value, forType: .string) { copied = value }
   }
 }

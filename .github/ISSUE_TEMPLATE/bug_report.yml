@@ -1,10 +1,10 @@
 name: Bug report
-description: Report a problem with the public alpha.
+description: Report a problem with iMCP-HTTP.
 body:
   - type: markdown
     attributes:
       value: |
-        Check the [alpha limitations](https://github.com/huglyfe/iMCP-HTTP#alpha-limitations-and-verification) first.
+        Check the [known limitations](https://github.com/huglyfe/iMCP-HTTP#status) first. Report security issues privately; see the [security policy](https://github.com/huglyfe/iMCP-HTTP/security/policy).
         Use disposable examples. Do not include tokens, account details, Apple content, or screenshots of unrelated data.
   - type: input
     id: environment

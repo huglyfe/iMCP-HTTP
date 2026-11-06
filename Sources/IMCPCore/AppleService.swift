@@ -1,4 +1,4 @@
-/// Implemented services, in menu order. Future inventory belongs in docs/PLAN.md.
+/// Implemented services, in menu order.
 public enum AppleService: String, CaseIterable, Codable, Identifiable, Sendable {
   case reminders
   case calendar

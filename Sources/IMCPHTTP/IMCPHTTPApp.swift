@@ -3,19 +3,51 @@ import SwiftUI
 @main
 struct IMCPHTTPApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+  @State private var showingHelp = false
 
   var body: some Scene {
-    Window("iMCP-HTTP · Public Alpha", id: "main") {
-      MainView(runtime: delegate.runtime)
+    Window("iMCP-HTTP · v0.6 Preview", id: "main") {
+      MainView(runtime: delegate.runtime, showingHelp: $showingHelp)
+        .preferredColorScheme(previewColorScheme)
     }
-    .defaultSize(width: 580, height: 540)
+    .defaultSize(width: 680, height: 660)
+    .commands { AppCommands(showingHelp: $showingHelp) }
 
     MenuBarExtra {
       OverviewView(runtime: delegate.runtime)
+        .preferredColorScheme(previewColorScheme)
     } label: {
       MenuIcon(runtime: delegate.runtime)
     }
     .menuBarExtraStyle(.window)
+  }
+
+  // Visual acceptance can exercise both appearances without changing the owner's Mac settings.
+  private var previewColorScheme: ColorScheme? {
+    #if DEBUG
+      switch ProcessInfo.processInfo.environment["IMCP_HTTP_PREVIEW_APPEARANCE"] {
+      case "light": .light
+      case "dark": .dark
+      default: nil
+      }
+    #else
+      nil
+    #endif
+  }
+}
+
+private struct AppCommands: Commands {
+  @Binding var showingHelp: Bool
+  @Environment(\.openWindow) private var openWindow
+
+  var body: some Commands {
+    CommandGroup(replacing: .help) {
+      Button("iMCP-HTTP Help") {
+        openWindow(id: "main")
+        NSApp.activate(ignoringOtherApps: true)
+        showingHelp = true
+      }.keyboardShortcut("?", modifiers: .command)
+    }
   }
 }
 
